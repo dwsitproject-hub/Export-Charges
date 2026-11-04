@@ -33,6 +33,7 @@ Specs: [PRD](docs/02-PRD-Export-Duty-Levy-Platform.md) · [Technical Design](htt
 | Catalogue exports above 50,000 rows prepared in the background, owner-only download for 24 h | Done |
 | Scheduled jobs: nightly data-quality check with dashboard, reference-price gap check, dormancy, audit-chain check, DWS Hub key refresh, session sweep | Done |
 | *Sources* page: every official PDF behind the data (regulations, reference-price and KMK decrees) to open, download and check by SHA-256, with what each one is used for; the calculator links the decrees it used | Done |
+| DWS Hub SDK in the web app (page views, errors, bug button, breadcrumbs, `identify` with the Hub `sub`, tracked actions, release tag for Sentinel) and staging deployment for two servers | Done |
 | Daily source watch: BPK status and amendments of registered regulations, new PMK and Kepmendag documents on the official listings, new files on JDIH pages, changed official PDFs — reported to Makers, never published | Done |
 | Quarterly access reviews: keep or revoke each role assignment, 14-day escalation, signed PDF/A report for auditors | Done |
 | Configuration screen: session limits, step-up window, roles at first sign-in, network allow-list, disclaimer — bounded, audited, applied at once | Done |
@@ -49,7 +50,7 @@ protected function, and confirm a code before sensitive actions — DWS Hub does
 | Method and path | Access | Notes |
 |---|---|---|
 | `GET /api/auth/login?returnTo=` · `GET /api/auth/callback` | public (allow-listed network) | DWS Hub sign-in; also the launch URL to register in the Hub |
-| `GET /api/auth/me` | signed in | Profile, roles, permissions, TOTP status, CSRF token |
+| `GET /api/auth/me` | signed in | Profile, roles, permissions, `hubSubject` (DWS Hub `sub`, for the Hub SDK), TOTP status, CSRF token |
 | `POST /api/auth/logout` | signed in (idempotent) | `{"allSessions": true}` signs out every browser |
 | `GET /api/auth/totp/status` · `POST /api/auth/totp/enroll` · `POST /api/auth/totp/confirm` | signed in | Authenticator setup; confirm returns 10 recovery codes once |
 | `POST /api/auth/step-up` | signed in | `{"code"}` or `{"recoveryCode"}`; valid 5 minutes |
@@ -365,16 +366,18 @@ not; no session still returns 200. Always clears cookies and sends `Cache-Contro
 
 ```
 backend/           API (NestJS): src/, migrations/, test/, db/init/ (PostgreSQL init scripts), Dockerfile,
-                   var/ (local file storage and downloaded official PDFs; not in git)
-frontend/          Web app (React + Vite): src/, index.html, nginx.conf (Docker), Dockerfile
-docs/              PRD and review of the prototype
+                   docker-compose.staging.yml, deploy/, var/ (local file storage and official PDFs; not in git)
+frontend/          Web app (React + Vite): src/, index.html, nginx.conf.template, Dockerfile,
+                   docker-compose.staging.yml, deploy/
+docs/              PRD, review of the prototype, DEPLOY-STAGING.md
 assets/            The original HTML prototype
 package.json       npm workspaces (@ecr/api = backend, @ecr/web = frontend) and the root scripts below
 docker-compose.yml Database, and the whole app in Docker
 .env               Local settings for both (copy of .env.example)
 ```
 
-Run every command below from the repository root.
+Run every command below from the repository root. Staging (FE 172.28.92.56:3160, BE 172.28.92.57:4160, ApsaraDB
+RDS, DWS Hub SDK and Sentinel): [docs/DEPLOY-STAGING.md](docs/DEPLOY-STAGING.md).
 
 ## Run locally
 

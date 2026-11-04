@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { api, AppNotification, ChangeSetSummary, fetchMe, formatDecimal, listChangeSets, listNotifications, listRefSeries, listRegulations, LogoutResult, Me, RegulationView, SeriesView, signInUrl } from './api';
+import { hubIdentify } from './hubSdk';
 import { AccessReviewDetail, AccessReviewsPage } from './pages/AccessReviews';
 import { AdminUsers } from './pages/AdminUsers';
 import { AuditLogPage } from './pages/AuditLog';
@@ -45,7 +46,12 @@ function SignedInArea({ path }: { path: string }) {
   const [error, setError] = useState<unknown>(null);
 
   useEffect(() => {
-    fetchMe().then(setMe).catch(setError);
+    fetchMe()
+      .then((m) => {
+        if (m) hubIdentify({ hubSubject: m.user.hubSubject, email: m.user.email });
+        setMe(m);
+      })
+      .catch(setError);
   }, []);
 
   if (error) return <Page title="Something went wrong" nav={false}><ErrorText error={error} /></Page>;

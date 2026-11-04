@@ -137,6 +137,12 @@ describe('DWS Hub sign-in, session and logout', () => {
 
   // ------------------------------------------------------------------ logout
 
+  it('returns the DWS Hub user id for the Hub SDK (DwsHub.identify)', async () => {
+    const user = h.newUser();
+    const { agent } = await h.signedIn(undefined, user);
+    expect((await agent.get('/api/auth/me').expect(200)).body.user).toMatchObject({ email: user.email, hubSubject: user.sub });
+  });
+
   it('requires the CSRF token to log out a live session', async () => {
     const { agent } = await h.signedIn();
     const res = await agent.post('/api/auth/logout').expect(403);

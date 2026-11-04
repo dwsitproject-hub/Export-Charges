@@ -1,4 +1,5 @@
 # Web app plus /api on one origin, as the WAF/SLB routing does in UAT and production (SameSite=Strict cookies).
+# A template: the nginx image fills in ${ECR_API_UPSTREAM} at start (the api service locally, the BE server on staging).
 server {
     listen 80;
     server_name _;
@@ -8,7 +9,7 @@ server {
     client_max_body_size 26m;
 
     location /api/ {
-        proxy_pass http://api:3100;
+        proxy_pass ${ECR_API_UPSTREAM};
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

@@ -33,6 +33,7 @@ import {
   saveChangeItem,
   ScheduleData,
 } from '../api';
+import { hubTrack } from '../hubSdk';
 import { Badge, ErrorText, headStyle, Page, rowStyle, tableStyle, useStepUp, TableWrap } from '../ui';
 import { EMPTY, EntityEditor, RefOptions } from './Editors';
 
@@ -244,6 +245,7 @@ export function ChangeSetDetail({ me, id }: { me: Me; id: string }) {
     act(async () => {
       let result: ChangeSet | null = null;
       await run(async () => { result = await changeSetAction(set.id, action, body); });
+      if (action === 'approve' || action === 'reject') hubTrack(`change_set_${action === 'approve' ? 'approved' : 'rejected'}`, { kind: set.kind });
       return result!;
     }, done);
 
@@ -317,7 +319,7 @@ export function ChangeSetDetail({ me, id }: { me: Me; id: string }) {
       )}
 
       <section aria-label="Actions" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginTop: 24 }}>
-        {editable && <SubmitButton hasWarnings={warnings.length > 0} onSubmit={(ack) => act(() => changeSetAction(set.id, 'submit', { acknowledgeWarnings: ack }), 'Submitted for review.')} />}
+        {editable && <SubmitButton hasWarnings={warnings.length > 0} onSubmit={(ack) => act(async () => { const r = await changeSetAction(set.id, 'submit', { acknowledgeWarnings: ack }); hubTrack('change_set_submitted', { kind: r.kind, items: r.items.length }); return r; }, 'Submitted for review.')} />}
         {editable && <button onClick={() => act(() => changeSetAction(set.id, 'discard'), 'Rate update discarded.')}>Discard</button>}
         {isOwner && set.kind !== 'ROLLBACK' && set.status === 'SUBMITTED' && <button onClick={() => act(() => changeSetAction(set.id, 'withdraw'), 'Withdrawn to draft.')}>Withdraw</button>}
         {canReview && set.status === 'SUBMITTED' && <button onClick={() => act(() => changeSetAction(set.id, 'start-review'), 'Review started.')}>Start review</button>}

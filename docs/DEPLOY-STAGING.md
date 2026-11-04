@@ -1,0 +1,202 @@
+# ECR staging deployment
+
+How the Export Charges Registry (ECR) runs on staging, and the one-time steps around it.
+
+```
+Browser ──► FE server 172.28.92.56:3160   ecr-web-staging (nginx: web app, /api proxied)
+                      │ /api
+                      ▼
+            BE server 172.28.92.57:4160   ecr-api-staging (NestJS API, scheduled jobs)
+                      │
+                      ├──► ApsaraDB RDS  pgm-d9jx9o06qae8gf3h.pgsql.ap-southeast-5.rds.aliyuncs.com:5432
+                      ├──► staging DWS Hub  (OIDC token and JWKS)
+                      └──► peraturan.bpk.go.id, jdih.kemenkeu.go.id, jdih.kemendag.go.id, fiskal.kemenkeu.go.id (source watch)
+Browser ──► staging DWS Hub  (sign-in; Hub SDK script and analytics)
+```
+
+| | FE server 172.28.92.56 | BE server 172.28.92.57 |
+|---|---|---|
+| Container | `ecr-web-staging` | `ecr-api-staging` (+ `ecr-migrate-staging`, runs once per deploy) |
+| Port | **3160** on all interfaces | **4160** on 172.28.92.57 only |
+| Compose file | `frontend/docker-compose.staging.yml` | `backend/docker-compose.staging.yml` |
+| Settings | `frontend/.env.staging` (from `.env.staging.example`) | `backend/.env.staging` (from `.env.staging.example`) |
+| Deploy | `sudo bash frontend/deploy/deploy-staging.sh` | `sudo bash backend/deploy/deploy-staging.sh` |
+
+**Ports.** 3160 and 4160 are free on the respective servers (checked against the running containers and the
+reserved 3110, 3111, 3120, 3121 and 3130). Each deploy script also refuses to start if another program holds its
+port. To use other ports, change `ECR_WEB_PORT` / `ECR_API_PORT` (and `ECR_API_UPSTREAM` on the FE side).
+
+Staging is plain HTTP, so `COOKIE_SECURE=false`; production needs HTTPS (see the root README).
+
+---
+
+## 1. Network and access (once)
+
+| From | To | Why |
+|---|---|---|
+| Users (office, VPN) | FE 172.28.92.56:3160 | The application |
+| FE 172.28.92.56 | BE 172.28.92.57:4160 | `/api` |
+| BE 172.28.92.57 | RDS :5432 | Database — add 172.28.92.57 to the RDS **whitelist** |
+| BE 172.28.92.57 | staging DWS Hub | Token exchange and signing keys |
+| BE 172.28.92.57 | the four official sites above, HTTPS | Daily source watch; without it the job fails and alerts Super Admins |
+| Both servers | GitHub, Docker Hub, registry.npmjs.org | Building the images |
+
+## 2. Database on ApsaraDB RDS (once)
+
+The instance must be **PostgreSQL 18** (the schema uses `uuidv7()`).
+
+1. RDS console → **Accounts**: create `ecr_app` (standard account) with a strong password.
+2. **Databases**: create `ecr`, owner `ecr_app`, encoding UTF8.
+3. The first migration creates the extensions `citext` and `btree_gist`. If `ecr_app` may not create extensions,
+   create them once with the high-privilege account (or under **Plugins** in the console):
+   ```sql
+   CREATE EXTENSION IF NOT EXISTS citext;
+   CREATE EXTENSION IF NOT EXISTS btree_gist;
+   ```
+4. Put the connection in `backend/.env.staging` → `DATABASE_URL`. URL-encode special characters in the password
+   (`@` → `%40`, `#` → `%23`, `/` → `%2F`). Add `?sslmode=require` if the instance enforces SSL.
+
+## 3. DWS Hub registration (once, in the **staging** Hub)
+
+Hub Admin → **Applications** → add *Export Charges Registry (staging)* (SSO-TARGET-APP-INTEGRATION.md):
+
+| Field | Value |
+|---|---|
+| `sso_mode` | `oidc` |
+| `oauth_client_id` | e.g. `ecr-staging` → `OIDC_CLIENT_ID` |
+| `oidc_redirect_uris` | `http://172.28.92.56:3160/api/auth/callback` |
+| Target / launch URL | `http://172.28.92.56:3160/api/auth/login` |
+
+Assign the people who should use ECR; the first sign-in creates their ECR account with the Viewer role.
+`HUB_ISSUER` is the `issuer` of the staging Hub's `/api/sso/.well-known/openid-configuration`. If the BE server
+reaches the Hub at another address than that issuer, set `HUB_DISCOVERY_URL` too.
+
+**Hub SDK** (SDK-INTEGRATION-GUIDE.md) — Admin → Applications → *Export Charges Registry (staging)* → **SDK**:
+
+- Copy the key into `frontend/.env.staging` → `VITE_HUB_SDK_KEY`, and the script address into `VITE_HUB_SDK_URL`
+  (`<staging Hub>/api/sdk/v1/hub-sdk.js`). Use the staging Hub's key, not production's.
+- **Allowed origins**: `http://172.28.92.56:3160` (it is the Target URL, so normally already allowed).
+- ECR sends no Content-Security-Policy, so nothing else is needed. The staging Hub must be HTTP or HTTPS like ECR is
+  served — an HTTP page may load an HTTPS script, not the other way round.
+
+What the web app does with the SDK: page views, time in app, JS errors, the 🐞 bug button and breadcrumbs come from
+the script; ECR calls `DwsHub.identify({ id: <Hub sub>, email })` after sign-in (from `/api/auth/me` →
+`user.hubSubject`) and `DwsHub.reset()` on sign-out, and tracks `calculation_saved`, `evidence_pack_created`,
+`catalogue_exported`, `change_set_submitted`, `change_set_approved` and `change_set_rejected`. The build adds
+`data-release` (the git commit) and keeps function names, so stack traces are readable.
+
+**Sentinel** (SENTINEL-GUIDE.md) — Admin → Analytic → *Export Charges Registry (staging)* → **Sentinel settings**:
+
+| Field | Value |
+|---|---|
+| GitHub repository | `dwsitproject-hub/Export-Charges` |
+| Branch | `main` (the SDK reports the exact release commit) |
+| Application folder | leave empty (the repository holds `frontend/` and `backend/`) |
+| Analyse automatically | ✓ |
+
+Notes for Sentinel:
+
+> Export Charges Registry (ECR): Indonesian export duty (BK) and levy (PE) for palm products. React 19 + Vite SPA in
+> `frontend/` (nginx serves it and proxies `/api`); NestJS 11 API in `backend/` with PostgreSQL 18 and plain SQL
+> (`backend/src`, migrations in `backend/migrations`). Sign-in through DWS Hub OIDC; privileged roles must confirm an
+> ECR authenticator code (API answers `STEP_UP_REQUIRED`, the web app shows a dialog). Data changes only through
+> maker-checker change sets; charges are computed in `backend/src/tariffs/charge-engine.ts` from published data
+> versions. "Value missing" in the catalogue or calculator is expected when the month's CPO reference price or the
+> week's KMK rate has not been entered yet. Scheduled jobs in `backend/src/jobs`, source watch in
+> `backend/src/source-watch`.
+
+The Hub's read-only GitHub token must include `dwsitproject-hub/Export-Charges` (fine-grained tokens list repositories
+explicitly); **Test repository access** should show `main` and its latest commit.
+
+## 4. The code on each server (once)
+
+Both servers build from a clone in `/opt/export-charges`. Give each server its own **read-only deploy key**:
+
+```bash
+sudo ssh-keygen -t ed25519 -C "export-charges staging $(hostname)" -f /root/.ssh/id_ed25519_exportcharges -N ""
+sudo cat /root/.ssh/id_ed25519_exportcharges.pub   # GitHub → Export-Charges → Settings → Deploy keys (no write access)
+sudo tee -a /root/.ssh/config >/dev/null <<'EOF'
+Host github-exportcharges
+  HostName github.com
+  User git
+  IdentityFile /root/.ssh/id_ed25519_exportcharges
+  IdentitiesOnly yes
+EOF
+sudo git clone git@github-exportcharges:dwsitproject-hub/Export-Charges.git /opt/export-charges
+```
+
+## 5. Backend (BE server 172.28.92.57)
+
+```bash
+cd /opt/export-charges
+sudo cp backend/.env.staging.example backend/.env.staging
+sudo chmod 600 backend/.env.staging
+openssl rand -base64 32                  # → ECR_ENCRYPTION_KEY (keep it: it encrypts authenticator secrets)
+sudo nano backend/.env.staging           # fill every CHANGE_ME
+sudo bash backend/deploy/deploy-staging.sh
+```
+
+The script builds the images, runs the migrations (`ecr-migrate-staging`), starts `ecr-api-staging` on
+172.28.92.57:4160 and waits for `/api/ready`. Uploaded documents live in `/opt/export-charges/data` (owned by uid 1000).
+
+**First Super Admins** (SoD-4 needs two). Each person signs in once through the Hub, then:
+
+```bash
+cd /opt/export-charges
+sudo docker compose --env-file backend/.env.staging -f backend/docker-compose.staging.yml run --rm migrate \
+  npx tsx src/scripts/grant-role.ts --email alice@corp.example --role SUPER_ADMIN --reason "Staging platform owner"
+```
+
+From then on roles are managed on the *Users* page.
+
+## 6. Frontend (FE server 172.28.92.56)
+
+```bash
+cd /opt/export-charges
+sudo cp frontend/.env.staging.example frontend/.env.staging
+sudo nano frontend/.env.staging          # Hub SDK address and key (or leave both empty to build without the SDK)
+sudo bash frontend/deploy/deploy-staging.sh
+```
+
+The script checks that the API answers, builds the web app with the Hub SDK and the commit as release, starts
+`ecr-web-staging` on port 3160 and checks `/` and `/api/health` through the proxy.
+
+## 7. Check
+
+1. `http://172.28.92.56:3160` → *Sign in with DWS Hub* → back in ECR as Viewer.
+2. Hub: Admin → Applications → SDK says **Receiving data**; Analytic shows the signed-in user (not anonymous).
+3. As Super Admin: *Jobs* → `source-watch` → *Run now*: OK (otherwise the BE server cannot reach the official sites).
+4. Sentinel settings → **Test repository access** shows `main`.
+5. Click the 🐞 button, send a test report; it appears under Analytic with Sentinel's analysis.
+
+The staging database starts empty: regulations, products, prices and KMK rates are entered through change sets
+(or the Excel import), as in production.
+
+## 8. Updating and rolling back
+
+```bash
+cd /opt/export-charges && sudo git pull --ff-only
+sudo bash backend/deploy/deploy-staging.sh      # BE server, first when the API changed
+sudo bash frontend/deploy/deploy-staging.sh     # FE server
+```
+
+To go back to an earlier commit: `sudo git checkout <commit>` and run the scripts again. Migrations only add to the
+schema; a migration that must be undone needs a new migration.
+
+## 9. Troubleshooting
+
+| Symptom | Cause / fix |
+|---|---|
+| Script: `still has values to fill in` | A `CHANGE_ME` is left in the `.env.staging` file it names. |
+| Script: `Port … is already used by another program` | Choose another port in `.env.staging` (and `ECR_API_UPSTREAM` for the API). |
+| `ecr-migrate-staging` fails with `permission denied to create extension` | Create `citext` and `btree_gist` with the high-privilege account (section 2). |
+| `function uuidv7() does not exist` | The RDS instance is older than PostgreSQL 18. |
+| Migrate cannot connect | RDS whitelist lacks 172.28.92.57, or the password in `DATABASE_URL` is not URL-encoded. |
+| FE script: `Cannot reach the API` | Backend not deployed, or 172.28.92.56 → 172.28.92.57:4160 blocked. |
+| `403 NETWORK_NOT_ALLOWED` | The user's address is outside `ALLOWED_NETWORKS`. |
+| Sign-in ends on *DWS Hub is unavailable* | The BE server cannot reach the Hub, or `HUB_ISSUER` is wrong (`docker logs ecr-api-staging`). |
+| Sign-in ends on *could not be verified* | `HUB_ISSUER` differs from the Hub's `issuer`, or `OIDC_CLIENT_ID` from the registration. |
+| Hub SDK: `403 origin_not_allowed` | Add `http://172.28.92.56:3160` under SDK → Allowed origins. |
+| Users show as anonymous in the Hub | They signed in before the SDK was added; next sign-in identifies them. |
+
+Logs: `sudo docker logs -f ecr-api-staging` (BE), `sudo docker logs -f ecr-web-staging` (FE).

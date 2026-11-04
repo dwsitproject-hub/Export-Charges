@@ -147,8 +147,13 @@ export class AuthController {
     const { session, user } = req.ecr!;
     const { roles, permissions, privileged } = await this.sessions.access(user.id);
     const { enrolled } = await this.totp.status(this.db.pool, user.id);
+    // The DWS Hub user id (OIDC `sub`) for this Hub, which the web app reports to the Hub SDK (DwsHub.identify).
+    const { rows: [hub] } = await this.db.query<{ subject: string }>(
+      `SELECT subject FROM ecr.user_identity WHERE user_id = $1 AND provider = 'DWS_HUB' AND issuer = $2 ORDER BY last_seen_at DESC NULLS LAST LIMIT 1`,
+      [user.id, this.config.hubIssuer],
+    );
     return {
-      user: { id: user.id, email: user.email, fullName: user.full_name, roles, permissions, privileged },
+      user: { id: user.id, email: user.email, fullName: user.full_name, roles, permissions, privileged, hubSubject: hub?.subject ?? null },
       totp: { enrolled, enrollmentRequired: privileged && !enrolled },
       session: {
         id: session.id,

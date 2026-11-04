@@ -1,0 +1,29 @@
+# Staging frontend on the FE server (172.28.92.56): the built web app behind nginx, which proxies /api to the API on
+# the BE server. Run through frontend/deploy/deploy-staging.sh, which passes --env-file frontend/.env.staging.
+name: ecr-staging-web
+
+services:
+  web:
+    build:
+      context: ..
+      dockerfile: frontend/Dockerfile
+      target: web
+      args:
+        VITE_HUB_SDK_URL: ${VITE_HUB_SDK_URL:-}
+        VITE_HUB_SDK_KEY: ${VITE_HUB_SDK_KEY:-}
+        VITE_GIT_SHA: ${VITE_GIT_SHA:-}
+    image: ecr-web:staging
+    container_name: ecr-web-staging
+    environment:
+      ECR_API_UPSTREAM: ${ECR_API_UPSTREAM:-http://172.28.92.57:4160}
+    ports:
+      - "${ECR_WEB_BIND:-0.0.0.0}:${ECR_WEB_PORT:-3160}:80"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "5" }

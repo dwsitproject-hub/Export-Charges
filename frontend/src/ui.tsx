@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { ApiFailure, logout, Me, stepUp, unreadNotifications } from './api';
+import { hubReset } from './hubSdk';
 
 /** The signed-in person, set once by App; the shell reads it to show only the pages they may use. */
 export const MeContext = createContext<Me | null>(null);
@@ -199,6 +200,7 @@ function UserMenu({ me }: { me: Me }) {
     setBusy(true);
     try {
       const result = await logout(allSessions);
+      hubReset();
       sessionStorage.setItem('ecr.logout', JSON.stringify(result));
       window.location.replace('/signed-out');
     } catch (e) {

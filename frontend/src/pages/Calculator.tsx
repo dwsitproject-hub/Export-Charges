@@ -15,6 +15,7 @@ import {
   verifyCalculation,
   verifyEvidence,
 } from '../api-catalogue';
+import { hubTrack } from '../hubSdk';
 import { Badge, ErrorText, headStyle, Page, rowStyle, tableStyle, TableWrap } from '../ui';
 import { chargeText } from './ChangeSets';
 
@@ -83,6 +84,7 @@ export function CalculatorPage() {
       const body = { ...input, lines: input.lines.filter((l) => l.productId) };
       if (save) {
         const r = await saveCalculation(body);
+        hubTrack('calculation_saved', { lines: body.lines.length, status: r.status, simulation: r.isSimulation });
         setResult(r);
         setSaved(r.id);
       } else {
@@ -404,6 +406,7 @@ export function CalculationDetail({ me, id }: { me: Me; id: string }) {
     setError(null);
     try {
       const pack = await createEvidence(id);
+      hubTrack('evidence_pack_created');
       setCalc((c) => (c ? { ...c, evidenceId: pack.evidenceId } : c));
       window.location.assign(evidenceFileUrl(pack.evidenceId));
     } catch (e) {

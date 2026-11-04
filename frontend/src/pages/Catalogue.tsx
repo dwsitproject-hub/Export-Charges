@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState, type ReactNode } from 'react';
 import { Charge, formatDecimal, Me } from '../api';
 import { Category, CATEGORIES, CATEGORY_TEXT, CatalogueResponse, CatalogueRow, exportCatalogue, Facet, getCatalogue } from '../api-catalogue';
+import { hubTrack } from '../hubSdk';
 import { Badge, ErrorText, Page, TableWrap } from '../ui';
 
 const wibToday = () => new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10);
@@ -31,6 +32,7 @@ export function CataloguePage({ me }: { me: Me }) {
     setQueued(null);
     try {
       const result = await exportCatalogue(format, params);
+      hubTrack('catalogue_exported', { format });
       if (result.queued) setQueued({ id: result.job.id, rows: result.rows });
     } catch (e) {
       setError(e);

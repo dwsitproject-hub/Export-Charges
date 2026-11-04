@@ -1,0 +1,41 @@
+# Staging backend on the BE server (172.28.92.57): the ECR API and its one-shot migration.
+# The database is ApsaraDB RDS; the web app runs on the FE server (frontend/docker-compose.staging.yml).
+# Run through backend/deploy/deploy-staging.sh, which passes --env-file backend/.env.staging.
+name: ecr-staging
+
+services:
+  migrate:
+    build: { context: .., dockerfile: backend/Dockerfile, target: build }
+    image: ecr-tools:staging
+    container_name: ecr-migrate-staging
+    working_dir: /app/backend
+    command: ["npx", "tsx", "src/scripts/migrate-cli.ts"]
+    env_file: .env.staging
+    restart: "no"
+
+  api:
+    build: { context: .., dockerfile: backend/Dockerfile, target: api }
+    image: ecr-api:staging
+    container_name: ecr-api-staging
+    env_file: .env.staging
+    environment:
+      PORT: "3100"
+      STORAGE_DIR: var/storage
+    volumes:
+      # Uploaded source documents and exports (the OSS bucket stands in for this in production).
+      - ${ECR_DATA_DIR:-/opt/export-charges/data}:/app/backend/var
+    ports:
+      # Private address only: the FE server's nginx is the one way in (TRUST_PROXY=1).
+      - "${ECR_API_BIND:-172.28.92.57}:${ECR_API_PORT:-4160}:3100"
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3100/api/ready').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "5" }
