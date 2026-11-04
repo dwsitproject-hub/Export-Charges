@@ -189,9 +189,14 @@ schema; a migration that must be undone needs a new migration.
 |---|---|
 | Script: `still has values to fill in` | A `CHANGE_ME` is left in the `.env.staging` file it names. |
 | Script: `Port … is already used by another program` | Choose another port in `.env.staging` (and `ECR_API_UPSTREAM` for the API). |
-| `ecr-migrate-staging` fails with `permission denied to create extension` | Create `citext` and `btree_gist` with the high-privilege account (section 2). |
-| `function uuidv7() does not exist` | The RDS instance is older than PostgreSQL 18. |
-| Migrate cannot connect | RDS whitelist lacks 172.28.92.57, or the password in `DATABASE_URL` is not URL-encoded. |
+| `service "migrate" didn't complete successfully` | The script prints the migration log below it; or run `sudo docker logs ecr-migrate-staging`. Its last lines name the database, the error and the likely cause (rows below). |
+| `ETIMEDOUT` | No answer from RDS: add 172.28.92.57 to the RDS whitelist, or open the security group / route to port 5432. |
+| `ECONNREFUSED` / `ENOTFOUND` | Wrong host or port in `DATABASE_URL`, or the server's DNS cannot resolve the RDS host. |
+| `28P01 password authentication failed` | Wrong user or password; URL-encode special characters in the password. |
+| `28000 no pg_hba.conf entry` | The instance refuses this client: whitelist 172.28.92.57, or add `?sslmode=require` if it needs SSL. |
+| `3D000 database "ecr" does not exist` | Create the database in the RDS console (section 2). |
+| `42501 permission denied to create extension` | Create `citext` and `btree_gist` with the high-privilege account (section 2). |
+| `42883 function uuidv7() does not exist` | The RDS instance is older than PostgreSQL 18. |
 | FE script: `Cannot reach the API` | Backend not deployed, or 172.28.92.56 → 172.28.92.57:4160 blocked. |
 | `403 NETWORK_NOT_ALLOWED` | The user's address is outside `ALLOWED_NETWORKS`. |
 | Sign-in ends on *DWS Hub is unavailable* | The BE server cannot reach the Hub, or `HUB_ISSUER` is wrong (`docker logs ecr-api-staging`). |

@@ -12,6 +12,8 @@ export function createPool(databaseUrl: string): Pool {
     connectionString: databaseUrl,
     options: '-c search_path=ecr,public -c timezone=UTC',
     max: 10,
+    // A blocked network or a wrong host fails within seconds instead of hanging.
+    connectionTimeoutMillis: 15_000,
   });
 }
 

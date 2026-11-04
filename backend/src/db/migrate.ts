@@ -32,7 +32,8 @@ export async function migrate(pool: Pool, dir = defaultMigrationsDir()): Promise
       applied.push(file);
     } catch (err) {
       await client.query('ROLLBACK');
-      throw new Error(`Migration ${file} failed: ${(err as Error).message}`);
+      // Keep the PostgreSQL error code (SQLSTATE) so the caller can explain it.
+      throw Object.assign(new Error(`Migration ${file} failed: ${(err as Error).message}`), { code: (err as { code?: string }).code });
     } finally {
       client.release();
     }

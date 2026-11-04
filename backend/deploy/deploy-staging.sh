@@ -32,7 +32,13 @@ chown -R 1000:1000 "$DATA"
 
 echo "Building $(git rev-parse --short HEAD) ..."
 "${COMPOSE[@]}" build
-"${COMPOSE[@]}" up -d
+if ! "${COMPOSE[@]}" up -d; then
+  echo "Start failed. Migration log (ecr-migrate-staging):" >&2
+  docker logs ecr-migrate-staging 2>&1 | tail -40 >&2
+  echo "See docs/DEPLOY-STAGING.md, Troubleshooting." >&2
+  exit 1
+fi
+docker logs ecr-migrate-staging 2>&1 | tail -5
 
 echo "Waiting for the API on http://$BIND:$PORT ..."
 for _ in $(seq 1 40); do
