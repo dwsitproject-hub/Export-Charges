@@ -31,6 +31,9 @@ export function ipAllowed(list: BlockList, ip: string): boolean {
 export function networkGuard(cidrs: () => string[]) {
   let current: { source: string[]; list: BlockList } | null = null;
   return (req: Request, res: Response, next: NextFunction) => {
+    // Health probes (Docker's own check from inside the container, load balancers) come from addresses outside the
+    // list; they only report up/ready and expose no data.
+    if (req.method === 'GET' && (req.path === '/api/health' || req.path === '/api/ready')) return next();
     const source = cidrs();
     if (current?.source !== source) current = { source, list: networkList(source) };
     if (ipAllowed(current.list, clientIp(req))) return next();

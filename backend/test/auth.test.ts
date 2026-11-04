@@ -223,12 +223,15 @@ describe('DWS Hub sign-in, session and logout', () => {
     expect(rows[0].broken_at).toBeNull();
   });
 
-  it('refuses requests from outside the office and VPN networks', async () => {
+  it('refuses requests from outside the office and VPN networks, but answers health probes', async () => {
     const restricted = await createApp(testConfig(h.hub.issuer, { ALLOWED_NETWORKS: '10.0.0.0/8' }), false);
     await restricted.init();
     try {
-      const res = await request(restricted.getHttpServer()).get('/api/health').expect(403);
+      const res = await request(restricted.getHttpServer()).get('/api/auth/me').expect(403);
       expect(res.body.error.code).toBe('NETWORK_NOT_ALLOWED');
+      // Container health checks and load balancers call these from addresses outside the list.
+      await request(restricted.getHttpServer()).get('/api/health').expect(200);
+      await request(restricted.getHttpServer()).get('/api/ready').expect(200);
     } finally {
       await restricted.close();
     }
