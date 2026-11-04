@@ -53,8 +53,10 @@ The instance must be **PostgreSQL 18** (the schema uses `uuidv7()`).
    CREATE EXTENSION IF NOT EXISTS citext;
    CREATE EXTENSION IF NOT EXISTS btree_gist;
    ```
-4. Put the connection in `backend/.env.staging` → `DATABASE_URL`. URL-encode special characters in the password
-   (`@` → `%40`, `#` → `%23`, `/` → `%2F`). Add `?sslmode=require` if the instance enforces SSL.
+4. Put the connection in `backend/.env.staging` → `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER` and `DB_PASSWORD`. Enter
+   the password exactly as issued, in single quotes — `DB_PASSWORD='…'` — so `$`, `#` and spaces stay as they are
+   (no URL-encoding). Set `DB_SSLMODE=require` if the instance enforces SSL.
+   A full `DATABASE_URL` also works, but then special characters in the password must be URL-encoded.
 
 ## 3. DWS Hub registration (once, in the **staging** Hub)
 
@@ -191,9 +193,10 @@ schema; a migration that must be undone needs a new migration.
 | Script: `Port … is already used by another program` | Choose another port in `.env.staging` (and `ECR_API_UPSTREAM` for the API). |
 | `service "migrate" didn't complete successfully` | The script prints the migration log below it; or run `sudo docker logs ecr-migrate-staging`. Its last lines name the database, the error and the likely cause (rows below). |
 | `ETIMEDOUT` | No answer from RDS: add 172.28.92.57 to the RDS whitelist, or open the security group / route to port 5432. |
-| `ECONNREFUSED` / `ENOTFOUND` | Wrong host or port in `DATABASE_URL`, or the server's DNS cannot resolve the RDS host. |
-| `28P01 password authentication failed` | Wrong user or password; URL-encode special characters in the password. |
-| `28000 no pg_hba.conf entry` | The instance refuses this client: whitelist 172.28.92.57, or add `?sslmode=require` if it needs SSL. |
+| `DATABASE_URL is not a valid URL` | A special character in the password (`/ ? # @ %`, space) is not URL-encoded. Use `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` instead (section 2). |
+| `ECONNREFUSED` / `ENOTFOUND` | Wrong `DB_HOST` or `DB_PORT`, or the server's DNS cannot resolve the RDS host. |
+| `28P01 password authentication failed` | Wrong `DB_USER` or `DB_PASSWORD`; write the password in single quotes (`DB_PASSWORD='…'`), as Docker Compose otherwise cuts it at ` #` and replaces `$…`. |
+| `28000 no pg_hba.conf entry` | The instance refuses this client: whitelist 172.28.92.57, or set `DB_SSLMODE=require` if it needs SSL. |
 | `3D000 database "ecr" does not exist` | Create the database in the RDS console (section 2). |
 | `42501 permission denied to create extension` | Create `citext` and `btree_gist` with the high-privilege account (section 2). |
 | `42883 function uuidv7() does not exist` | The RDS instance is older than PostgreSQL 18. |

@@ -12,6 +12,7 @@ import { parseArgs } from 'node:util';
 import { loadDotEnv } from '../config';
 import { createPool } from '../db/db.service';
 import { normaliseHs } from '../registry/entities';
+import { databaseUrl } from '../db/database-url';
 
 /** RFC 4180 CSV: quoted fields, doubled quotes, commas and newlines inside quotes. */
 export function parseCsv(text: string): string[][] {
@@ -71,7 +72,7 @@ async function main() {
   });
   if (bad.length) throw new Error(`Not 8-digit HS codes (nothing loaded):\n  ${bad.slice(0, 20).join('\n  ')}`);
 
-  const pool = createPool(process.env.DATABASE_URL!);
+  const pool = createPool(databaseUrl());
   const client = await pool.connect();
   try {
     await client.query('BEGIN');

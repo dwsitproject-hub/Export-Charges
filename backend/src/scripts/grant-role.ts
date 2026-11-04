@@ -8,13 +8,14 @@ import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { loadDotEnv } from '../config';
 import { createPool } from '../db/db.service';
+import { databaseUrl } from '../db/database-url';
 
 async function main() {
   loadDotEnv(resolve(process.cwd(), '../.env'));
   const { values } = parseArgs({ options: { email: { type: 'string' }, role: { type: 'string' }, reason: { type: 'string' } } });
   if (!values.email || !values.role || !values.reason) throw new Error('--email, --role and --reason are required');
 
-  const pool = createPool(process.env.DATABASE_URL!);
+  const pool = createPool(databaseUrl());
   const client = await pool.connect();
   try {
     await client.query('BEGIN');

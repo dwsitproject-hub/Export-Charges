@@ -1,4 +1,5 @@
 import { resolve } from 'node:path';
+import { databaseUrl } from './db/database-url';
 
 export const APP_CONFIG = Symbol('APP_CONFIG');
 
@@ -96,7 +97,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
 
   return {
     port: Number(env.PORT ?? 3100),
-    databaseUrl: required(env, 'DATABASE_URL'),
+    databaseUrl: databaseUrl(env),
     publicBaseUrl,
     hubIssuer,
     hubDiscoveryUrl: env.HUB_DISCOVERY_URL?.trim() || `${hubIssuer}/api/sso/.well-known/openid-configuration`,
