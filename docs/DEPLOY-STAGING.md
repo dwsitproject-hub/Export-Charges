@@ -47,12 +47,21 @@ The instance must be **PostgreSQL 18** (the schema uses `uuidv7()`).
 
 1. RDS console → **Accounts**: create `ecr_app` (standard account) with a strong password.
 2. **Databases**: create `ecr`, owner `ecr_app`, encoding UTF8.
-3. The first migration creates the extensions `citext` and `btree_gist`. If `ecr_app` may not create extensions,
-   create them once with the high-privilege account (or under **Plugins** in the console):
-   ```sql
-   CREATE EXTENSION IF NOT EXISTS citext;
-   CREATE EXTENSION IF NOT EXISTS btree_gist;
+3. A standard RDS account may not create extensions, so create `citext` and `btree_gist` once with the instance's
+   **high-privilege account**, and make sure `ecr_app` owns the database and may create tables in `public` (the
+   migrations table lives there). From the BE server, without installing anything (asks for the password):
+   ```bash
+   sudo docker run --rm -it postgres:18 psql \
+     "host=pgm-d9jx9o06qae8gf3h.pgsql.ap-southeast-5.rds.aliyuncs.com port=5432 dbname=ecr user=<high-privilege account>" \
+     -c "SELECT version();" \
+     -c "CREATE EXTENSION IF NOT EXISTS citext;" \
+     -c "CREATE EXTENSION IF NOT EXISTS btree_gist;" \
+     -c "ALTER DATABASE ecr OWNER TO ecr_app;" \
+     -c "GRANT CREATE ON SCHEMA public TO ecr_app;"
    ```
+   `version()` must say PostgreSQL 18. The same statements can be run in the console's DMS SQL window, connected to
+   database `ecr` as the high-privilege account. Afterwards the migration's `CREATE EXTENSION IF NOT EXISTS` finds them
+   and needs no special right.
 4. Put the connection in `backend/.env.staging` → `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER` and `DB_PASSWORD`. Enter
    the password exactly as issued, in single quotes — `DB_PASSWORD='…'` — so `$`, `#` and spaces stay as they are
    (no URL-encoding). Set `DB_SSLMODE=require` if the instance enforces SSL.
@@ -198,7 +207,8 @@ schema; a migration that must be undone needs a new migration.
 | `28P01 password authentication failed` | Wrong `DB_USER` or `DB_PASSWORD`; write the password in single quotes (`DB_PASSWORD='…'`), as Docker Compose otherwise cuts it at ` #` and replaces `$…`. |
 | `28000 no pg_hba.conf entry` | The instance refuses this client: whitelist 172.28.92.57, or set `DB_SSLMODE=require` if it needs SSL. |
 | `3D000 database "ecr" does not exist` | Create the database in the RDS console (section 2). |
-| `42501 permission denied to create extension` | Create `citext` and `btree_gist` with the high-privilege account (section 2). |
+| `42501 permission denied to create extension` | Create `citext` and `btree_gist` with the high-privilege account (section 2, step 3). |
+| `42501 permission denied for schema public` | Run the `ALTER DATABASE … OWNER` and `GRANT CREATE ON SCHEMA public` lines of section 2, step 3. |
 | `42883 function uuidv7() does not exist` | The RDS instance is older than PostgreSQL 18. |
 | FE script: `Cannot reach the API` | Backend not deployed, or 172.28.92.56 → 172.28.92.57:4160 blocked. |
 | `403 NETWORK_NOT_ALLOWED` | The user's address is outside `ALLOWED_NETWORKS`. |
