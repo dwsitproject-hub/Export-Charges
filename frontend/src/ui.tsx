@@ -212,7 +212,7 @@ function UserMenu({ me }: { me: Me }) {
   const roles = me.user.roles.map(roleName);
   return (
     <details className="user-menu" ref={menu}>
-      <summary aria-label={`Account: ${me.user.fullName}`}>
+      <summary aria-label={`Account: ${me.user.fullName}`} title={`${me.user.fullName} · ${roles.join(' · ') || 'No role'}`}>
         <span className="avatar" aria-hidden="true">{initials(me.user.fullName)}</span>
         <span className="who">{me.user.fullName}<small>{roles.join(' · ') || 'No role'}</small></span>
       </summary>

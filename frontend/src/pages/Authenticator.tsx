@@ -49,11 +49,11 @@ export function Authenticator({ me }: { me: Me }) {
   }
 
   return (
-    <Page title="Set up your authenticator">
+    <Page title={me.totp.required ? 'Set up your authenticator' : 'Authenticator (optional)'}>
       <p>
-        {me.user.privileged
+        {me.totp.required
           ? 'Your role can change data or access, so ECR asks for a code from an authenticator app before sensitive actions.'
-          : 'You can set up an authenticator app now; it is required only for privileged roles.'}
+          : 'Your role does not need an authenticator app; ECR will not ask you for a code.'}
       </p>
       {!setup ? (
         <button onClick={start}>Start setup</button>

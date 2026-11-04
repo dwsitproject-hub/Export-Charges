@@ -65,15 +65,16 @@ export class AuthzGuard implements CanActivate {
       throw new ApiError(403, 'FORBIDDEN', "You don't have access to this function.", { missing });
     }
 
-    // Privileged roles must have an ECR authenticator before using any protected function (PRD US-13-P1 AC2).
-    if (access.privileged && rule.permissions?.length) {
+    // Privileged roles must have an ECR authenticator before using any protected function (PRD US-13-P1 AC2),
+    // except roles in TOTP_EXEMPT_ROLES (default Super Admin), which neither enrol nor step up.
+    if (access.totpRequired && rule.permissions?.length) {
       const { enrolled } = await this.totp.status(this.db.pool, user.id);
       if (!enrolled) {
         throw new ApiError(403, 'TOTP_ENROLLMENT_REQUIRED', 'Set up an authenticator app to use privileged functions.');
       }
     }
 
-    if (rule.stepUp) {
+    if (rule.stepUp && access.totpRequired) {
       const windowMs = this.config.stepUpWindowMinutes * 60_000;
       const fresh = session.stepped_up_at && Date.now() - session.stepped_up_at.getTime() < windowMs;
       if (!fresh) {

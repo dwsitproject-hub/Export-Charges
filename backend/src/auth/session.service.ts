@@ -140,8 +140,11 @@ export class SessionService {
     return rows[0].privileged;
   }
 
-  /** Live roles and effective permissions; `privileged` drives TOTP enrolment and the shorter idle timeout. */
-  async access(userId: string): Promise<{ roles: string[]; permissions: string[]; privileged: boolean }> {
+  /**
+   * Live roles and effective permissions. `privileged` drives the shorter idle timeout; `totpRequired` the ECR authenticator
+   * (enrolment and step-up), which roles in TOTP_EXEMPT_ROLES (default Super Admin) never need.
+   */
+  async access(userId: string): Promise<{ roles: string[]; permissions: string[]; privileged: boolean; totpRequired: boolean }> {
     const { rows } = await this.db.query<{ role: string; is_privileged: boolean; permission: string | null }>(
       `SELECT r.code AS role, r.is_privileged, rp.permission_code AS permission
          FROM ecr.user_role ur
@@ -150,10 +153,13 @@ export class SessionService {
         WHERE ur.user_id = $1 AND ur.revoked_at IS NULL AND (ur.expires_at IS NULL OR ur.expires_at > now())`,
       [userId],
     );
+    const roles = [...new Set(rows.map((r) => r.role))].sort();
+    const privileged = rows.some((r) => r.is_privileged);
     return {
-      roles: [...new Set(rows.map((r) => r.role))].sort(),
+      roles,
       permissions: [...new Set(rows.map((r) => r.permission).filter((p): p is string => !!p))].sort(),
-      privileged: rows.some((r) => r.is_privileged),
+      privileged,
+      totpRequired: privileged && !roles.some((r) => this.config.totpExemptRoles.includes(r)),
     };
   }
 }

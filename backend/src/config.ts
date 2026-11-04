@@ -26,6 +26,8 @@ export interface AppConfig {
   /** Roles given to an account created just-in-time on first DWS Hub sign-in (may be empty). */
   jitDefaultRoles: string[];
   /** How long a TOTP step-up stays valid for sensitive actions (Technical Design §4.1.6). */
+  /** Roles that never need the ECR authenticator (enrolment or step-up), even though privileged. */
+  totpExemptRoles: string[];
   stepUpWindowMinutes: number;
   totpIssuer: string;
   /** Directory standing in for the OSS bucket of source documents (local development and tests). */
@@ -121,6 +123,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       .map((s) => s.trim().toUpperCase())
       .filter(Boolean),
     stepUpWindowMinutes: 5,
+    // Default: Super Admins sign in through DWS Hub only. Set TOTP_EXEMPT_ROLES= (empty) to require it of every privileged role.
+    totpExemptRoles: (env.TOTP_EXEMPT_ROLES ?? 'SUPER_ADMIN')
+      .split(',')
+      .map((s) => s.trim().toUpperCase())
+      .filter(Boolean),
     totpIssuer: env.TOTP_ISSUER?.trim() || 'ECR',
     storageDir: resolve(env.STORAGE_DIR?.trim() || 'var/storage'),
     clamdHost,

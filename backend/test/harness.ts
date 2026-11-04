@@ -22,7 +22,7 @@ export interface Me {
   csrfToken: string;
   session: { id: string; idleTimeoutMinutes: number; steppedUpAt: string | null };
   user: { id: string; email: string; roles: string[]; permissions: string[]; privileged: boolean };
-  totp: { enrolled: boolean; enrollmentRequired: boolean };
+  totp: { enrolled: boolean; required: boolean; enrollmentRequired: boolean };
 }
 
 export function testConfig(hubIssuer: string, overrides: Record<string, string> = {}): AppConfig {
@@ -36,6 +36,8 @@ export function testConfig(hubIssuer: string, overrides: Record<string, string> 
     ECR_ENCRYPTION_KEY: randomBytes(32).toString('base64'),
     ALLOWED_NETWORKS: '127.0.0.0/8,::1/128',
     JIT_DEFAULT_ROLES: 'VIEWER',
+    // Tests exercise the authenticator on every privileged role; the Super Admin exemption has its own test.
+    TOTP_EXEMPT_ROLES: '',
     MALWARE_SCAN_REQUIRED: 'false',
     PUBLISH_DUE_INTERVAL_MS: '0',
     MAIL_TRANSPORT: 'memory',

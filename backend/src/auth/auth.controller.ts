@@ -145,7 +145,7 @@ export class AuthController {
   async me(@Req() req: EcrRequest, @Res({ passthrough: true }) res: Response) {
     res.setHeader('Cache-Control', 'no-store');
     const { session, user } = req.ecr!;
-    const { roles, permissions, privileged } = await this.sessions.access(user.id);
+    const { roles, permissions, privileged, totpRequired } = await this.sessions.access(user.id);
     const { enrolled } = await this.totp.status(this.db.pool, user.id);
     // The DWS Hub user id (OIDC `sub`) for this Hub, which the web app reports to the Hub SDK (DwsHub.identify).
     const { rows: [hub] } = await this.db.query<{ subject: string }>(
@@ -154,7 +154,7 @@ export class AuthController {
     );
     return {
       user: { id: user.id, email: user.email, fullName: user.full_name, roles, permissions, privileged, hubSubject: hub?.subject ?? null },
-      totp: { enrolled, enrollmentRequired: privileged && !enrolled },
+      totp: { enrolled, required: totpRequired, enrollmentRequired: totpRequired && !enrolled },
       session: {
         id: session.id,
         authMethod: session.auth_method,

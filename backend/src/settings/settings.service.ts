@@ -128,7 +128,11 @@ export class SettingsService implements OnModuleInit, OnModuleDestroy {
       })),
       // Not changeable here: they need a deployment (secrets, redirect URIs registered at DWS Hub) or are policy.
       fixed: [
-        { label: 'Authenticator for privileged roles', value: 'Always required', note: 'Cannot be switched off (US-52-N1 AC1)' },
+        {
+          label: 'Authenticator for privileged roles',
+          value: this.config.totpExemptRoles.length ? `Required, except ${this.config.totpExemptRoles.join(', ')}` : 'Always required',
+          note: 'TOTP_EXEMPT_ROLES',
+        },
         { label: 'DWS Hub issuer', value: this.config.hubIssuer, note: 'HUB_ISSUER' },
         { label: 'DWS Hub client id', value: this.config.oidcClientId, note: 'OIDC_CLIENT_ID' },
         { label: 'Sign-in redirect URI', value: `${this.config.publicBaseUrl}/api/auth/callback`, note: 'Registered at DWS Hub; from PUBLIC_BASE_URL' },
