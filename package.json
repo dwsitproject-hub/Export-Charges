@@ -1,0 +1,24 @@
+{
+  "name": "ecr",
+  "private": true,
+  "description": "Export Charges Registry — Indonesian palm oil export duty (BK) and levy (PE) registry",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "db:up": "docker compose up -d db",
+    "db:down": "docker compose down",
+    "migrate": "npm run migrate -w @ecr/api",
+    "grant:role": "npm run grant:role -w @ecr/api --",
+    "load:btki": "npm run load:btki -w @ecr/api --",
+    "dev:hub": "npm run dev:hub -w @ecr/api",
+    "dev:api": "npm run dev -w @ecr/api",
+    "dev:web": "npm run dev -w @ecr/web",
+    "build": "npm run build --workspaces",
+    "test": "npm test -w @ecr/api"
+  },
+  "engines": {
+    "node": ">=22.12"
+  }
+}

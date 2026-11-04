@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <title>Export Charges</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#9a6533"/>
+      <stop offset="1" stop-color="#4f3214"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  <g transform="translate(256 256) scale(1.14) translate(-256 -256) translate(-26 23) rotate(-35 256 256)">
+    <path d="M96 256 L176 166 H388 Q416 166 416 194 V318 Q416 346 388 346 H176 Z" fill="#fbf6ef" stroke="#fbf6ef" stroke-width="24" stroke-linejoin="round"/>
+    <circle cx="168" cy="256" r="22" fill="#6e4620"/>
+    <g transform="translate(316 256) rotate(35) translate(0 4)">
+      <path d="M0 -70 C0 -70 -46 -14 -46 18 A46 46 0 0 0 46 18 C46 -14 0 -70 0 -70 Z" fill="#d08a45"/>
+    </g>
+  </g>
+</svg>

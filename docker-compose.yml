@@ -1,0 +1,103 @@
+# Local only. Production runs on ApsaraDB RDS for PostgreSQL 18 and the pipeline's images.
+#   npm run db:up                  database only, for npm run dev:*
+#   docker compose up -d --build   the whole app on http://localhost:8095 (signs in through the Hub dev stub)
+# Fixed project name: keeps the existing containers, network and database volume (ecr_ecr-db).
+name: ecr
+
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: ecr
+      POSTGRES_PASSWORD: ecr_dev_only
+      POSTGRES_DB: ecr
+    ports:
+      - "5443:5432"
+    volumes:
+      - ecr-db:/var/lib/postgresql
+      - ./backend/db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ecr -d ecr"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    build: { context: ., dockerfile: backend/Dockerfile, target: build }
+    image: ecr-tools:local
+    working_dir: /app/backend
+    command: ["npx", "tsx", "src/scripts/migrate-cli.ts"]
+    environment:
+      DATABASE_URL: postgres://ecr:ecr_dev_only@db:5432/ecr
+    depends_on:
+      db: { condition: service_healthy }
+    restart: "no"
+
+  api:
+    build: { context: ., dockerfile: backend/Dockerfile, target: api }
+    image: ecr-api:local
+    # Same .env as npm run dev:api (encryption key, client id, intervals); the lines below differ in Docker.
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://ecr:ecr_dev_only@db:5432/ecr
+      PUBLIC_BASE_URL: http://localhost:8095
+      HUB_ISSUER: http://localhost:4100
+      HUB_DASHBOARD_URL: http://localhost:4100/dashboard
+      HUB_DISCOVERY_URL: ""
+      # nginx (web) is the one proxy in front; the browser reaches it from this network's gateway (see networks).
+      TRUST_PROXY: "1"
+      ALLOWED_NETWORKS: 127.0.0.0/8,::1/128,192.168.32.1/32
+      STORAGE_DIR: var/storage
+    volumes:
+      # Shared with npm run dev:api, so uploaded documents and exports are the same in both.
+      - ./backend/var:/app/backend/var
+    ports:
+      # The Hub stub runs in this container's network (service hub), so http://localhost:4100 is the same
+      # address for the browser and for the API's token and JWKS requests.
+      - "127.0.0.1:4100:4100"
+    depends_on:
+      db: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3100/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  hub:
+    build: { context: ., dockerfile: backend/Dockerfile, target: build }
+    image: ecr-hub:local
+    network_mode: service:api
+    working_dir: /app/backend
+    command: ["npx", "tsx", "test/dev-hub.ts"]
+    env_file: .env
+    environment:
+      HUB_ISSUER: http://localhost:4100
+      PUBLIC_BASE_URL: http://localhost:8095
+      DEV_HUB_HOST: 0.0.0.0
+    depends_on:
+      api: { condition: service_started }
+    restart: unless-stopped
+
+  web:
+    build: { context: ., dockerfile: frontend/Dockerfile, target: web }
+    image: ecr-web:local
+    ports:
+      - "127.0.0.1:8095:80"
+    depends_on:
+      api: { condition: service_healthy }
+      # Listed so that `up web` also re-attaches the stub when the api container (its network) was recreated.
+      hub: { condition: service_started }
+    restart: unless-stopped
+
+networks:
+  default:
+    # Fixed so the gateway (the browser's address as nginx sees it) stays in ALLOWED_NETWORKS.
+    ipam:
+      config:
+        - subnet: 192.168.32.0/24
+          gateway: 192.168.32.1
+
+volumes:
+  ecr-db:
