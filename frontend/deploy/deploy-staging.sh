@@ -17,6 +17,14 @@ setting() { grep -E "^$1=" "$ENV_FILE" | tail -1 | cut -d= -f2-; }
 PORT=$(setting ECR_WEB_PORT); PORT=${PORT:-3160}
 UPSTREAM=$(setting ECR_API_UPSTREAM); UPSTREAM=${UPSTREAM:-http://172.28.92.57:4160}
 
+# Which commit is deployed, and whether GitHub has a newer one (a rollback deploys an older commit on purpose).
+timeout 30 git fetch -q origin 2>/dev/null || echo "Could not reach GitHub to check for newer commits." >&2
+DEPLOY_SHA=$(git rev-parse --short HEAD)
+if LATEST_SHA=$(git rev-parse --short '@{u}' 2>/dev/null) && [[ $DEPLOY_SHA != "$LATEST_SHA" ]]    && git merge-base --is-ancestor HEAD '@{u}'; then
+  echo "Note: deploying $DEPLOY_SHA, but GitHub's $(git rev-parse --abbrev-ref '@{u}') is at $LATEST_SHA." >&2
+  echo "      Run 'sudo git pull --ff-only' first, unless you mean to deploy this older commit." >&2
+fi
+
 # Other applications share this server: the port must be free, or held by this web app already.
 if ss -ltn "( sport = :$PORT )" | grep -q ":$PORT" \
    && ! docker ps --format '{{.Names}} {{.Ports}}' | grep -q "^ecr-web-staging .*:$PORT->"; then
