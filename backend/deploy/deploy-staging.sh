@@ -16,10 +16,10 @@ fi
 setting() { grep -E "^$1=" "$ENV_FILE" | tail -1 | cut -d= -f2-; }
 BIND=$(setting ECR_API_BIND); BIND=${BIND:-172.28.92.57}
 PORT=$(setting ECR_API_PORT); PORT=${PORT:-4160}
-MOUNT=$(setting STORAGE_HOST_MOUNT); MOUNT=${MOUNT:-/mnt/synology/eos}
+PROJECT_DIR=$(setting STORAGE_HOST_PROJECT_DIR)
 DEPLOYMENT=$(setting STORAGE_DEPLOYMENT); DEPLOYMENT=${DEPLOYMENT:-dev}
 SLUG=$(setting STORAGE_PROJECT_SLUG); SLUG=${SLUG:-ECR}
-PROJECT_DIR="$MOUNT/$DEPLOYMENT/$SLUG"
+[[ -n $PROJECT_DIR ]] || { echo "Set STORAGE_HOST_PROJECT_DIR in $ENV_FILE (where NAS folder APPs/$DEPLOYMENT/$SLUG is mounted, e.g. /mnt/synology-ecr)." >&2; exit 1; }
 
 # Which commit is deployed, and whether GitHub has a newer one (a rollback deploys an older commit on purpose).
 timeout 30 git fetch -q origin 2>/dev/null || echo "Could not reach GitHub to check for newer commits." >&2
@@ -39,19 +39,31 @@ fi
 
 # Files live in ECR's own folder on the shared Synology NAS. Check only — never create or change anything there:
 # other systems use the same share.
-FSTYPE=$(findmnt -n -o FSTYPE --target "$MOUNT" 2>/dev/null || true)
-case "$FSTYPE" in
-  cifs|smb3|nfs|nfs4|fuse.*) ;;
-  *) echo "$MOUNT is not on the Synology share (file system: ${FSTYPE:-none}). Is the NAS mounted? Check STORAGE_HOST_MOUNT." >&2
-     exit 1 ;;
-esac
-[[ -d "$MOUNT/$DEPLOYMENT" ]] || { echo "$MOUNT/$DEPLOYMENT does not exist. Check STORAGE_HOST_MOUNT and STORAGE_DEPLOYMENT." >&2; exit 1; }
 if [[ ! -d "$PROJECT_DIR" ]]; then
-  echo "ECR's folder $PROJECT_DIR does not exist. Create APPs → $DEPLOYMENT → $SLUG in File Station (or ask infra);" >&2
-  echo "ECR does not create folders on the shared NAS." >&2
+  echo "$PROJECT_DIR does not exist. NAS folder APPs/$DEPLOYMENT/$SLUG must be created and mounted there (docs/DEPLOY-STAGING.md);" >&2
+  echo "ECR does not create folders or mounts." >&2
   exit 1
 fi
-echo "Storage: $PROJECT_DIR ($FSTYPE)"
+FSTYPE=$(findmnt -n -o FSTYPE --target "$PROJECT_DIR" 2>/dev/null || true)
+case "$FSTYPE" in
+  cifs|smb3|nfs|nfs4|fuse.*) ;;
+  *) echo "$PROJECT_DIR is not on the Synology share (file system: ${FSTYPE:-none}): the NAS folder is not mounted there." >&2
+     exit 1 ;;
+esac
+# The mount must be ECR's own NAS folder (not another application's) and writable.
+MNT_TARGET=$(findmnt -n -o TARGET --target "$PROJECT_DIR")
+MNT_SOURCE=$(findmnt -n -o SOURCE --target "$PROJECT_DIR")
+MNT_OPTIONS=$(findmnt -n -o OPTIONS --target "$PROJECT_DIR")
+NAS_PATH="${MNT_SOURCE%/}${PROJECT_DIR#"$MNT_TARGET"}"
+if [[ ${NAS_PATH,,} != */apps/${DEPLOYMENT,,}/${SLUG,,} ]]; then
+  echo "$PROJECT_DIR is NAS folder $NAS_PATH, not APPs/$DEPLOYMENT/$SLUG. Check STORAGE_HOST_PROJECT_DIR — it must not be another application's folder." >&2
+  exit 1
+fi
+if [[ ,$MNT_OPTIONS, == *,ro,* ]]; then
+  echo "$PROJECT_DIR ($NAS_PATH) is mounted read-only; ECR's folder must be mounted read-write." >&2
+  exit 1
+fi
+echo "Storage: $PROJECT_DIR = $NAS_PATH ($FSTYPE)"
 
 echo "Building $(git rev-parse --short HEAD) ..."
 "${COMPOSE[@]}" build

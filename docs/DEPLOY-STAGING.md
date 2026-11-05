@@ -151,18 +151,32 @@ The script checks ECR's folder on the Synology NAS (below), builds the images, r
 (`ecr-migrate-staging`), starts `ecr-api-staging` on 172.28.92.57:4160 and waits for `/api/ready`.
 
 **File storage on the Synology NAS** (SYNOLOGY-INTEGRATION.md). Every file ECR stores — the official PDFs, Excel
-imports, exports, evidence packs and access-review reports — goes to ECR's own folder on the shared NAS:
-File Station `APPs → dev → ECR`, on the server `${STORAGE_HOST_MOUNT}/dev/ECR` (default `/mnt/synology/eos/dev/ECR`).
-Other systems use the same share, so ECR is kept to that folder:
+imports, exports, evidence packs and access-review reports — goes to ECR's own folder on the shared NAS, File Station
+`APPs → dev → ECR`. On this server every application's NAS folder has **its own mount** (`/mnt/synology-pct` is
+`APPs/dev/PCT`, `/mnt/synology-tas` is `APPs/dev/TAS`, …; `/mnt/synology-apps` is the whole share, read-only), so ECR
+gets one too, set as `STORAGE_HOST_PROJECT_DIR` (default `/mnt/synology-ecr`). Other systems use the same share, so:
 
 - Only that folder is bound into the container (at `/mnt/synology/dev/ECR`); the rest of the share is not visible.
-- Neither Docker (`create_host_path: false`) nor ECR creates it, and nothing changes owners or permissions on the share.
-- The deploy script stops when `STORAGE_HOST_MOUNT` is not a network mount (the NAS is not mounted), when
-  `…/dev` or `…/dev/ECR` is missing, or when uid 1000 (the API's user) cannot write there; its write test creates one
-  temporary file in ECR's folder and removes it. The API checks the folder again at start.
+- Neither Docker (`create_host_path: false`) nor ECR creates folders or mounts, and nothing changes owners or permissions.
+- The deploy script stops unless `STORAGE_HOST_PROJECT_DIR` is a network mount, of NAS folder `APPs/dev/ECR` exactly
+  (another application's folder is refused), mounted read-write, and writable by uid 1000 (the API's user) — its
+  write test creates one temporary file in ECR's folder and removes it. The API checks the folder again at start.
 
-Before the first deploy, have `APPs → dev → ECR` created in File Station (or ask infra), writable by the user the
-share is mounted as for uid 1000. Use `STORAGE_DEPLOYMENT=prod` only for production.
+Once, by IT (or with their agreement): create `APPs → dev → ECR` in File Station, then mount it like the other
+applications, as uid/gid 1000 because the API runs as uid 1000. Line for `/etc/fstab` (same credentials file as the
+other mounts):
+
+```
+//172.30.1.94/APPs/dev/ECR /mnt/synology-ecr cifs rw,credentials=/etc/smb-eos.creds,uid=1000,gid=1000,forceuid,forcegid,dir_mode=0770,file_mode=0660,vers=3.0,iocharset=utf8,serverino,mapposix,soft,_netdev 0 0
+```
+
+```bash
+ls /mnt/synology-apps/dev/                 # ECR must be listed (the folder exists on the NAS)
+sudo mkdir -p /mnt/synology-ecr && sudo mount /mnt/synology-ecr
+findmnt /mnt/synology-ecr                  # SOURCE //172.30.1.94/APPs/dev/ECR, rw
+```
+
+Use `STORAGE_DEPLOYMENT=prod` (and the prod folder) only for production.
 
 **First load of the official data.** Staging starts empty. One command loads what was prepared and checked locally —
 6 official PDFs (Permenperin 32/2024, PMK 68/2025, PMK 69/2025, PMK 9/2026, Kepmendag 2064/2026, KMK 53/MK/EF.2/2026),
@@ -231,8 +245,10 @@ schema; a migration that must be undone needs a new migration.
 | Symptom | Cause / fix |
 |---|---|
 | Script: `still has values to fill in` | A `CHANGE_ME` is left in the `.env.staging` file it names. |
-| Script: `… is not on the Synology share` | The NAS is not mounted at `STORAGE_HOST_MOUNT`, or that setting is wrong. Mounting is infra's. |
-| Script: `ECR's folder … does not exist` | Create `APPs → dev → ECR` in File Station (or ask infra). ECR never creates it. |
+| Script: `… is not on the Synology share` | NAS folder `APPs/dev/ECR` is not mounted at `STORAGE_HOST_PROJECT_DIR` (section 5, the `/etc/fstab` line). |
+| Script: `… does not exist` | Create `APPs → dev → ECR` in File Station and its mount point (section 5). ECR never creates them. |
+| Script: `… is NAS folder …, not APPs/dev/ECR` | `STORAGE_HOST_PROJECT_DIR` points at another folder (e.g. another application's mount). Use ECR's own mount. |
+| Script: `… mounted read-only` | Mount ECR's folder read-write (not through `/mnt/synology-apps`, which is read-only). |
 | Script: `uid 1000 cannot write in …` | The share's mount must let uid 1000 write (SMB mount options `uid`/`gid` or `file_mode`/`dir_mode`) — infra. |
 | API log: `The storage folder … does not exist` | Same as above: the folder is missing or not bound; the API does not start without it. |
 | Seed: `already has … published data version(s)` | The first load already ran; later data goes through change sets. |
