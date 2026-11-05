@@ -21,6 +21,8 @@ COPY frontend/package.json frontend/
 RUN npm ci --omit=dev -w @ecr/api && npm cache clean --force
 COPY --from=build /app/backend/dist backend/dist
 COPY backend/migrations backend/migrations
+# Official data set for the first load of an environment (node dist/scripts/seed-official-data.js).
+COPY backend/seed backend/seed
 WORKDIR /app/backend
 RUN mkdir -p var/storage && chown -R node:node var
 USER node

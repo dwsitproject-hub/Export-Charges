@@ -8,6 +8,7 @@
     "dev": "nest start --watch",
     "migrate": "tsx src/scripts/migrate-cli.ts",
     "grant:role": "tsx src/scripts/grant-role.ts",
+    "seed:official": "node dist/scripts/seed-official-data.js",
     "load:btki": "tsx src/scripts/load-btki.ts",
     "dev:hub": "tsx test/dev-hub.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",

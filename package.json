@@ -11,6 +11,7 @@
     "db:down": "docker compose down",
     "migrate": "npm run migrate -w @ecr/api",
     "grant:role": "npm run grant:role -w @ecr/api --",
+    "seed:official": "npm run seed:official -w @ecr/api --",
     "load:btki": "npm run load:btki -w @ecr/api --",
     "dev:hub": "npm run dev:hub -w @ecr/api",
     "dev:api": "npm run dev -w @ecr/api",

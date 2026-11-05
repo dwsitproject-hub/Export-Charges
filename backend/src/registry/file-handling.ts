@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { connect } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 
@@ -16,8 +16,33 @@ export interface ObjectStore {
 export class DirectoryObjectStore implements ObjectStore {
   private readonly root: string;
 
-  constructor(root: string) {
+  /**
+   * `createRoot: false` for a folder on the shared Synology NAS: ECR writes only inside it and never creates it, so a
+   * missing mount or folder fails loudly instead of writing to the server's disk or next to another system's files.
+   */
+  constructor(root: string, private readonly options: { createRoot: boolean } = { createRoot: true }) {
     this.root = resolve(root);
+  }
+
+  /** Checks at start-up that the folder exists (or creates a local one) and that ECR can write in it. */
+  async assertWritable(): Promise<void> {
+    if (this.options.createRoot) await mkdir(this.root, { recursive: true });
+    else await this.requireRoot();
+    const probe = join(this.root, `.ecr-write-check-${process.pid}`);
+    try {
+      await writeFile(probe, 'ok');
+    } catch (err) {
+      throw new Error(`Cannot write in the storage folder ${this.root}: ${(err as Error).message}`);
+    } finally {
+      await rm(probe, { force: true });
+    }
+  }
+
+  private async requireRoot(): Promise<void> {
+    const info = await stat(this.root).catch(() => null);
+    if (!info?.isDirectory()) {
+      throw new Error(`The storage folder ${this.root} does not exist. On the Synology NAS, ECR's project folder must be created (and bound into the container) before ECR starts; ECR does not create it.`);
+    }
   }
 
   private path(key: string): string {
@@ -27,6 +52,7 @@ export class DirectoryObjectStore implements ObjectStore {
 
   async put(key: string, body: Buffer): Promise<void> {
     const target = this.path(key);
+    if (!this.options.createRoot) await this.requireRoot();
     await mkdir(dirname(target), { recursive: true });
     const temp = `${target}.${process.pid}.tmp`;
     await writeFile(temp, body, { flag: 'w' });

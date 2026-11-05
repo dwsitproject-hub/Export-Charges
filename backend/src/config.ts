@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
 import { databaseUrl } from './db/database-url';
+import { storageLocation, type StorageLocation } from './common/storage-path';
 
 export const APP_CONFIG = Symbol('APP_CONFIG');
 
@@ -30,8 +31,9 @@ export interface AppConfig {
   totpExemptRoles: string[];
   stepUpWindowMinutes: number;
   totpIssuer: string;
-  /** Directory standing in for the OSS bucket of source documents (local development and tests). */
+  /** Folder of every stored file: ECR's project folder on the shared Synology NAS, or a local folder (common/storage-path). */
   storageDir: string;
+  storageKind: StorageLocation['kind'];
   /** ClamAV daemon for upload scanning; required when malwareScanRequired (UAT and production). */
   clamdHost: string | null;
   clamdPort: number;
@@ -97,6 +99,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (mailTransport === 'smtp' && !env.SMTP_HOST?.trim()) throw new Error('SMTP_HOST is required when MAIL_TRANSPORT=smtp');
   if (cookieSecure && mailTransport !== 'smtp') throw new Error('MAIL_TRANSPORT must be smtp when COOKIE_SECURE=true (notifications must reach people)');
 
+  const storage = storageLocation(env);
+
   return {
     port: Number(env.PORT ?? 3100),
     databaseUrl: databaseUrl(env),
@@ -129,7 +133,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       .map((s) => s.trim().toUpperCase())
       .filter(Boolean),
     totpIssuer: env.TOTP_ISSUER?.trim() || 'ECR',
-    storageDir: resolve(env.STORAGE_DIR?.trim() || 'var/storage'),
+    storageDir: storage.dir,
+    storageKind: storage.kind,
     clamdHost,
     clamdPort: Number(env.CLAMD_PORT ?? 3310),
     malwareScanRequired,

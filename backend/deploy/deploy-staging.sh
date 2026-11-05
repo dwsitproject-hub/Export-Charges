@@ -16,7 +16,10 @@ fi
 setting() { grep -E "^$1=" "$ENV_FILE" | tail -1 | cut -d= -f2-; }
 BIND=$(setting ECR_API_BIND); BIND=${BIND:-172.28.92.57}
 PORT=$(setting ECR_API_PORT); PORT=${PORT:-4160}
-DATA=$(setting ECR_DATA_DIR); DATA=${DATA:-/opt/export-charges/data}
+MOUNT=$(setting STORAGE_HOST_MOUNT); MOUNT=${MOUNT:-/mnt/synology/eos}
+DEPLOYMENT=$(setting STORAGE_DEPLOYMENT); DEPLOYMENT=${DEPLOYMENT:-dev}
+SLUG=$(setting STORAGE_PROJECT_SLUG); SLUG=${SLUG:-ECR}
+PROJECT_DIR="$MOUNT/$DEPLOYMENT/$SLUG"
 
 # Which commit is deployed, and whether GitHub has a newer one (a rollback deploys an older commit on purpose).
 timeout 30 git fetch -q origin 2>/dev/null || echo "Could not reach GitHub to check for newer commits." >&2
@@ -34,12 +37,30 @@ if ss -ltn "( sport = :$PORT )" | grep -q ":$PORT" \
   exit 1
 fi
 
-# The API runs as uid 1000 (node) and keeps uploaded documents and exports here.
-mkdir -p "$DATA/storage"
-chown -R 1000:1000 "$DATA"
+# Files live in ECR's own folder on the shared Synology NAS. Check only — never create or change anything there:
+# other systems use the same share.
+FSTYPE=$(findmnt -n -o FSTYPE --target "$MOUNT" 2>/dev/null || true)
+case "$FSTYPE" in
+  cifs|smb3|nfs|nfs4|fuse.*) ;;
+  *) echo "$MOUNT is not on the Synology share (file system: ${FSTYPE:-none}). Is the NAS mounted? Check STORAGE_HOST_MOUNT." >&2
+     exit 1 ;;
+esac
+[[ -d "$MOUNT/$DEPLOYMENT" ]] || { echo "$MOUNT/$DEPLOYMENT does not exist. Check STORAGE_HOST_MOUNT and STORAGE_DEPLOYMENT." >&2; exit 1; }
+if [[ ! -d "$PROJECT_DIR" ]]; then
+  echo "ECR's folder $PROJECT_DIR does not exist. Create APPs → $DEPLOYMENT → $SLUG in File Station (or ask infra);" >&2
+  echo "ECR does not create folders on the shared NAS." >&2
+  exit 1
+fi
+echo "Storage: $PROJECT_DIR ($FSTYPE)"
 
 echo "Building $(git rev-parse --short HEAD) ..."
 "${COMPOSE[@]}" build
+
+# The API runs as uid 1000: it must be able to write in ECR's folder (one test file, removed at once).
+if ! docker run --rm --network none --user 1000:1000 --entrypoint sh -v "$PROJECT_DIR:/check" ecr-api:staging      -c 'f=/check/.ecr-write-check-$$ && echo ok > "$f" && rm -f "$f"'; then
+  echo "uid 1000 cannot write in $PROJECT_DIR. The share's mount options (uid/gid or file_mode/dir_mode) must allow it — ask infra." >&2
+  exit 1
+fi
 if ! "${COMPOSE[@]}" up -d; then
   echo "Start failed. Migration log (ecr-migrate-staging):" >&2
   docker logs ecr-migrate-staging 2>&1 | tail -40 >&2

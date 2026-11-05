@@ -422,8 +422,13 @@ and a `BAND_USD_PER_MT` line for the product; the change set shows the impact, a
 page shows its duty per tonne and *Schedules* and *Prices* list the data. *Catalogue* then lists the product
 with its charges, and *Calculator* works out a shipment (add a `FX-USDIDR` series and value for IDR).
 
-**Source documents.** Files are stored under `backend/var/storage` locally (the OSS bucket in UAT and
-production). Uploads are virus-scanned by ClamAV when `CLAMD_HOST` is set; without it they are recorded as
+**Source documents.** Every stored file (official PDFs, imports, exports, evidence packs, review reports) goes to
+one folder: `STORAGE_LOCAL_PATH` if set; else ECR's folder on the shared Synology NAS,
+`STORAGE_SYNOLOGY_ROOT/STORAGE_DEPLOYMENT/STORAGE_PROJECT_SLUG` (staging: `APPs → dev → ECR`, which must exist —
+ECR never creates it, see docs/DEPLOY-STAGING.md); else `STORAGE_DIR` (`backend/var/storage` locally). The API
+checks at start that it can write there. **First load** of a new environment: `node dist/scripts/seed-official-data.js
+--as <email> --reason "…"` publishes `backend/seed/official-palm-2026-11.json` directly, without a Checker, on an
+empty registry only (audited as `CHANGESET_PUBLISHED_DIRECT`). Uploads are virus-scanned by ClamAV when `CLAMD_HOST` is set; without it they are recorded as
 `NOT_SCANNED`, which is refused at startup wherever `MALWARE_SCAN_REQUIRED` is true (the default with
 `COOKIE_SECURE=true`).
 

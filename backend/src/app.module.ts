@@ -98,7 +98,7 @@ export class AppModule {
         JobsService,
         SourceWatchService,
         { provide: MAIL_SENDER, useValue: mailSender(config) },
-        { provide: OBJECT_STORE, useValue: new DirectoryObjectStore(config.storageDir) },
+        { provide: OBJECT_STORE, useValue: new DirectoryObjectStore(config.storageDir, { createRoot: config.storageKind === 'local' }) },
         {
           provide: MALWARE_SCANNER,
           useValue: config.clamdHost ? new ClamdScanner(config.clamdHost, config.clamdPort) : new NoScanner(),

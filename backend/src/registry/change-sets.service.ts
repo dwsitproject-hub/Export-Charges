@@ -615,6 +615,27 @@ export class ChangeSetsService implements OnModuleInit, OnModuleDestroy {
     return this.get(setId);
   }
 
+  /**
+   * Publishes a submitted set at once, without a Checker. Only the server-side seed command calls this (there is no
+   * API route): the initial load of official data. Audited as CHANGESET_PUBLISHED_DIRECT with the operator and reason;
+   * reviewed_by stays empty, so the set never reads as reviewed.
+   */
+  async publishDirect(actor: Actor, setId: string, reason: string): Promise<number> {
+    if (reason.trim().length < 10) throw new ApiError(400, 'INVALID_INPUT', 'Give a reason of at least 10 characters.');
+    return this.db.tx(async (client) => {
+      const set = await this.lockSet(client, setId);
+      requireStatus(set, ['SUBMITTED'], 'Submit the change set before publishing it directly.');
+      const effectiveAt = new Date();
+      await client.query(
+        `UPDATE ecr.change_set SET status = 'APPROVED', approved_at = now(), effective_at = $2, decision_comment = $3, updated_at = now()
+          WHERE id = $1`,
+        [setId, effectiveAt, `Published directly, without a Checker: ${reason}`],
+      );
+      await this.record(client, actor, 'CHANGESET_PUBLISHED_DIRECT', setId, { reason, after: { reviewedBy: null } });
+      return this.publish(client, { ...set, effective_at: effectiveAt }, actor.id);
+    });
+  }
+
   // ------------------------------------------------------------------ publish
 
   /**

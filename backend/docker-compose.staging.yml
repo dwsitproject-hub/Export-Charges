@@ -20,10 +20,19 @@ services:
     env_file: .env.staging
     environment:
       PORT: "3100"
-      STORAGE_DIR: var/storage
+      # Every stored file (source PDFs, imports, exports, evidence packs, review reports) goes to ECR's own folder on
+      # the shared Synology NAS (SYNOLOGY-INTEGRATION.md): {root}/{deployment}/{slug} inside the container.
+      STORAGE_SYNOLOGY_ROOT: /mnt/synology
+      STORAGE_DEPLOYMENT: ${STORAGE_DEPLOYMENT:-dev}
+      STORAGE_PROJECT_SLUG: ${STORAGE_PROJECT_SLUG:-ECR}
     volumes:
-      # Uploaded source documents and exports (the OSS bucket stands in for this in production).
-      - ${ECR_DATA_DIR:-/opt/export-charges/data}:/app/backend/var
+      # Only ECR's folder is bound, so the container never sees other systems' folders on the share. It must already
+      # exist: Docker is told not to create it, and the API does not create it either.
+      - type: bind
+        source: ${STORAGE_HOST_MOUNT:-/mnt/synology/eos}/${STORAGE_DEPLOYMENT:-dev}/${STORAGE_PROJECT_SLUG:-ECR}
+        target: /mnt/synology/${STORAGE_DEPLOYMENT:-dev}/${STORAGE_PROJECT_SLUG:-ECR}
+        bind:
+          create_host_path: false
     ports:
       # Private address only: the FE server's nginx is the one way in (TRUST_PROXY=1).
       - "${ECR_API_BIND:-172.28.92.57}:${ECR_API_PORT:-4160}:3100"
