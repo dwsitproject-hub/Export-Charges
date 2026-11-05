@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # Builds and (re)starts the ECR API on the staging BE server (172.28.92.57), then runs the database migrations.
 #   cd /opt/export-charges && git pull --ff-only && sudo bash backend/deploy/deploy-staging.sh
-set -euo pipefail
+set -Eeuo pipefail
+# Never stop without saying where and why.
+trap 'echo "deploy-staging.sh stopped at line $LINENO (exit $?): $BASH_COMMAND" >&2' ERR
 cd "$(dirname "$0")/../.."
+echo "ECR staging deploy: checking backend/.env.staging ..."
 
 ENV_FILE=backend/.env.staging
 COMPOSE=(docker compose --env-file "$ENV_FILE" -f backend/docker-compose.staging.yml)
@@ -13,7 +16,13 @@ if grep -q 'CHANGE_ME' "$ENV_FILE"; then
   grep -n 'CHANGE_ME' "$ENV_FILE" >&2
   exit 1
 fi
-setting() { grep -E "^$1=" "$ENV_FILE" | tail -1 | cut -d= -f2-; }
+# A setting's value ('' when the line is absent, so the defaults below apply), without quotes or Windows line endings.
+setting() {
+  local v
+  v=$(grep -E "^$1=" "$ENV_FILE" | tail -1 | cut -d= -f2- | tr -d '\r') || true
+  v=${v%\"}; v=${v#\"}; v=${v%\'}; v=${v#\'}
+  printf '%s' "$v"
+}
 BIND=$(setting ECR_API_BIND); BIND=${BIND:-172.28.92.57}
 PORT=$(setting ECR_API_PORT); PORT=${PORT:-4160}
 PROJECT_DIR=$(setting STORAGE_HOST_PROJECT_DIR)
