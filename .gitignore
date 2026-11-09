@@ -6,3 +6,4 @@ coverage/
 var/
 .claude/
 .env.staging
+.env.prod

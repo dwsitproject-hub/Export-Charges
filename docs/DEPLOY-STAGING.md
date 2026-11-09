@@ -26,7 +26,8 @@ Browser ──► staging DWS Hub  (sign-in; Hub SDK script and analytics)
 reserved 3110, 3111, 3120, 3121 and 3130). Each deploy script also refuses to start if another program holds its
 port. To use other ports, change `ECR_WEB_PORT` / `ECR_API_PORT` (and `ECR_API_UPSTREAM` on the FE side).
 
-Staging is plain HTTP, so `COOKIE_SECURE=false`; production needs HTTPS (see the root README).
+Staging is plain HTTP, so `COOKIE_SECURE=false`. Production: [DEPLOY-PROD.md](DEPLOY-PROD.md). The `deploy-staging.sh` scripts
+run the shared `deploy.sh staging`, the same script production runs with `prod`.
 
 ---
 

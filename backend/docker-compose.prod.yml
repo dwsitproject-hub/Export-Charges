@@ -1,0 +1,51 @@
+# Production backend on the BE server (172.28.80.51): the ECR API and its one-shot migration.
+# The database is ApsaraDB RDS; the web app runs on the FE server (frontend/docker-compose.prod.yml).
+# Run through backend/deploy/deploy-prod.sh, which passes --env-file backend/.env.prod (docs/DEPLOY-PROD.md).
+name: ecr-prod
+
+services:
+  migrate:
+    build: { context: .., dockerfile: backend/Dockerfile, target: build }
+    image: ecr-tools:prod
+    container_name: ecr-migrate-prod
+    working_dir: /app/backend
+    command: ["npx", "tsx", "src/scripts/migrate-cli.ts"]
+    env_file: .env.prod
+    restart: "no"
+
+  api:
+    build: { context: .., dockerfile: backend/Dockerfile, target: api }
+    image: ecr-api:prod
+    container_name: ecr-api-prod
+    env_file: .env.prod
+    environment:
+      PORT: "3100"
+      # Every stored file (source PDFs, imports, exports, evidence packs, review reports) goes to ECR's own folder on
+      # the shared Synology NAS (SYNOLOGY-INTEGRATION.md): {root}/{deployment}/{slug} inside the container.
+      STORAGE_SYNOLOGY_ROOT: /mnt/synology
+      STORAGE_DEPLOYMENT: ${STORAGE_DEPLOYMENT:-prod}
+      STORAGE_PROJECT_SLUG: ${STORAGE_PROJECT_SLUG:-ECR}
+    volumes:
+      # Only ECR's folder is bound: the server mounts NAS folder APPs/{deployment}/{slug} at STORAGE_HOST_PROJECT_DIR
+      # (one mount per application), so the container never sees other systems' folders. It must already exist:
+      # Docker is told not to create it, and the API does not create it either.
+      - type: bind
+        source: ${STORAGE_HOST_PROJECT_DIR:?set STORAGE_HOST_PROJECT_DIR in backend/.env.prod}
+        target: /mnt/synology/${STORAGE_DEPLOYMENT:-prod}/${STORAGE_PROJECT_SLUG:-ECR}
+        bind:
+          create_host_path: false
+    ports:
+      # Private address only: the FE server's nginx is the one way in (TRUST_PROXY=1).
+      - "${ECR_API_BIND:-172.28.80.51}:${ECR_API_PORT:-4160}:3100"
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3100/api/ready').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "5" }
