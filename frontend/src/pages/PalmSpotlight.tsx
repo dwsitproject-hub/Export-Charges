@@ -94,6 +94,7 @@ export function PalmSpotlight({ data, error }: { data: CatalogueResponse | null;
           <div className="palm-list" role="table" aria-label="Palm oil products and their charges today">
             <div className="palm-row head" role="row">
               <span role="columnheader">Product</span>
+              <span role="columnheader">Key spec</span>
               <span role="columnheader">Export duty (BK)</span>
               <span role="columnheader">Export levy (PE)</span>
               <span role="columnheader">Total per tonne</span>
@@ -104,6 +105,7 @@ export function PalmSpotlight({ data, error }: { data: CatalogueResponse | null;
                   <strong>{r.nameEn ?? r.nameId}</strong>
                   <small>HS {r.hsCodes.map((h) => `${h.isEx ? 'ex ' : ''}${h.code}`).join(', ')}{r.group ? ` · ${r.group}` : ''}</small>
                 </span>
+                <span className="spec" role="cell" data-label="Key spec">{r.keySpec ?? <span className="muted">—</span>}</span>
                 <ChargeCell c={r.bk} />
                 <ChargeCell c={r.pe} />
                 <span className="tot" role="cell" data-label="Total per t">
@@ -129,7 +131,14 @@ function ChargeCell({ c }: { c: Charge }) {
     : c.status === 'LISTED_ZERO' ? ['USD 0', 'zero']
     : c.status === 'NOT_LISTED' ? ['None', 'none']
     : ['Not available', 'missing'];
-  return <span className={`chg ${kind}${c.chargeType === 'PE' ? ' levy' : ''}`} role="cell" data-label={label} title={c.message ?? undefined}>{text}</span>;
+  // A levy charged as a share of the CPO reference price shows that share under the amount.
+  const pct = c.basisType === 'PCT_OF_REF_PRICE' && c.rate ? `${Number(c.rate).toLocaleString('en-US', { maximumFractionDigits: 4 })}% of CPO ref. price` : null;
+  return (
+    <span className={`chg ${kind}${c.chargeType === 'PE' ? ' levy' : ''}`} role="cell" data-label={label} title={c.message ?? undefined}>
+      {text}
+      {pct && <small>{pct}</small>}
+    </span>
+  );
 }
 
 const haystack = (r: CatalogueRow) =>
