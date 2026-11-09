@@ -55,8 +55,15 @@ function SignedInArea({ path }: { path: string }) {
       .catch(setError);
   }, []);
 
+  // No ECR session: go straight to DWS Hub, which signs the person in without a prompt while their Hub session is
+  // open. Once per 30 seconds at most, so a browser that refuses the session cookie gets the button, not a loop.
+  const autoSignIn = me === null && startAutoSignIn();
+  useEffect(() => {
+    if (autoSignIn) window.location.replace(signInUrl(window.location.pathname + window.location.search));
+  }, [autoSignIn]);
+
   if (error) return <Page title="Something went wrong" nav={false}><ErrorText error={error} /></Page>;
-  if (me === undefined) return <Page title="Loading…" nav={false}>{null}</Page>;
+  if (me === undefined || autoSignIn) return <Page title={autoSignIn ? 'Signing you in…' : 'Loading…'} nav={false}>{null}</Page>;
   if (me === null) {
     return (
       <Page title="Sign in" nav={false}>
@@ -66,6 +73,24 @@ function SignedInArea({ path }: { path: string }) {
     );
   }
   return <MeContext.Provider value={me}>{route(path, me)}</MeContext.Provider>;
+}
+
+/**
+ * True when this tab has not just tried an automatic sign-in; remembers the attempt (sessionStorage, per tab).
+ * Decided once per page load, so re-renders keep the same answer.
+ */
+let autoSignInDecision: boolean | undefined;
+function startAutoSignIn(): boolean {
+  if (autoSignInDecision !== undefined) return autoSignInDecision;
+  const key = 'ecr.autoSignInAt';
+  try {
+    const last = Number(sessionStorage.getItem(key) ?? 0);
+    autoSignInDecision = !(Date.now() - last < 30_000);
+    if (autoSignInDecision) sessionStorage.setItem(key, String(Date.now()));
+  } catch {
+    autoSignInDecision = false;
+  }
+  return autoSignInDecision;
 }
 
 function route(path: string, me: Me): ReactNode {

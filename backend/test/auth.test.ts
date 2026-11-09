@@ -82,22 +82,66 @@ describe('DWS Hub sign-in, session and logout', () => {
     expect(res.headers.location).toBe('/signin-error?reason=LOGIN_BLOCKED');
   });
 
-  it('refuses a replayed callback (single-use state)', async () => {
+  /** Follows ECR's own sign-in from a /api/auth/login location through the Hub stub; returns the callback response. */
+  async function completeSignIn(agent: ReturnType<typeof request.agent>, loginLocation: string) {
+    const start = await agent.get(loginLocation).expect(302);
+    const hubResponse = await fetch(start.headers.location, { redirect: 'manual' });
+    const callback = new URL(hubResponse.headers.get('location')!);
+    return { res: await agent.get(callback.pathname + callback.search), callbackPath: callback.pathname + callback.search };
+  }
+
+  it.each([
+    ['with a state ECR did not issue', '/api/auth/callback?code=hub-launch-code&state=hub-made-state'],
+    ['without a state', '/api/auth/callback?code=hub-launch-code'],
+  ])('signs in straight away when launched from the DWS Hub dashboard (%s)', async (_label, launch) => {
+    const user = h.newUser();
+    h.hub.user = user;
+    const agent = request.agent(h.server);
+    const first = await agent.get(launch).expect(302);
+    expect(first.headers.location).toBe('/api/auth/login?relaunch=1&returnTo=%2F');
+
+    const { res } = await completeSignIn(agent, first.headers.location);
+    expect(res.headers.location).toBe('/');
+    expect((await h.me(agent)).user.email).toBe(user.email);
+    const { rows } = await h.pool.query(`SELECT after FROM ecr.audit_event WHERE action = 'LOGIN_RELAUNCHED' ORDER BY chain_seq DESC LIMIT 1`);
+    expect(rows[0].after.reason).toBe(launch.includes('state=') ? 'UNKNOWN_STATE' : 'NO_STATE_OR_CODE');
+  });
+
+  it('restarts a replayed callback once (single-use state), then refuses it', async () => {
     const agent = request.agent(h.server);
     const { res, callbackPath } = await h.signIn(agent, h.newUser());
     expect(res.headers.location).toBe('/catalogue');
     const replay = await agent.get(callbackPath);
-    expect(replay.headers.location).toBe('/signin-error?reason=LOGIN_STATE_INVALID');
+    expect(replay.headers.location).toBe('/api/auth/login?relaunch=1&returnTo=%2F');
+    const again = await agent.get(callbackPath);
+    expect(again.headers.location).toBe('/signin-error?reason=LOGIN_STATE_INVALID');
   });
 
-  it('refuses a callback completed in a different browser (login CSRF)', async () => {
-    h.hub.user = h.newUser();
+  it('never signs a browser in with a callback from another browser (login CSRF)', async () => {
+    const attackerUser = h.newUser();
+    h.hub.user = attackerUser;
     const victim = request.agent(h.server);
     const attacker = request.agent(h.server);
     const start = await attacker.get('/api/auth/login').expect(302);
     const hubResponse = await fetch(start.headers.location, { redirect: 'manual' });
     const callback = new URL(hubResponse.headers.get('location')!);
     const res = await victim.get(callback.pathname + callback.search);
+    // The attacker's code is not redeemed: the victim is sent to start their own sign-in instead.
+    expect(res.headers.location).toBe('/api/auth/login?relaunch=1&returnTo=%2F');
+    await victim.get('/api/auth/me').expect(401);
+    const { rows } = await h.pool.query(`SELECT 1 FROM ecr.user_identity WHERE subject = $1`, [attackerUser.sub]);
+    expect(rows).toHaveLength(0);
+  });
+
+  it('does not restart a sign-in that ECR already restarted', async () => {
+    h.hub.user = h.newUser();
+    const first = await request.agent(h.server).get('/api/auth/callback?code=x&state=y').expect(302);
+    const agent = request.agent(h.server);
+    const start = await agent.get(first.headers.location).expect(302);
+    const hubResponse = await fetch(start.headers.location, { redirect: 'manual' });
+    const callback = new URL(hubResponse.headers.get('location')!);
+    // Completed in a browser that holds neither the login cookie nor the restart marker.
+    const res = await request.agent(h.server).get(callback.pathname + callback.search);
     expect(res.headers.location).toBe('/signin-error?reason=LOGIN_STATE_INVALID');
   });
 

@@ -6,7 +6,9 @@ import { decrypt, encrypt, pkceChallenge, randomToken, safeEqual, sha256 } from 
 import { clientIp } from '../common/http';
 import { APP_CONFIG, AppConfig } from '../config';
 import { DbService } from '../db/db.service';
-import { cookieNames, loginCookieClearOptions, loginCookieOptions, sessionCookieOptions } from './cookies';
+import {
+  cookieNames, loginCookieClearOptions, loginCookieOptions, relaunchCookieClearOptions, relaunchCookieOptions, sessionCookieOptions,
+} from './cookies';
 import { OidcService } from './oidc.service';
 import { assertCsrf, EcrRequest, SessionGuard } from './session.guard';
 import { SessionService } from './session.service';
@@ -19,6 +21,7 @@ interface LoginStateRow {
   code_verifier_enc: Buffer;
   return_to: string;
   fresh: boolean;
+  relaunch: boolean;
 }
 
 export interface LogoutResponse {
@@ -55,7 +58,7 @@ export class AuthController {
 
   /** SF-1.1 step 1: start DWS Hub sign-in with PKCE. Also the launch URL to register in DWS Hub (T-03). */
   @Get('login')
-  async login(@Query('returnTo') returnTo: unknown, @Res() res: Response): Promise<void> {
+  async login(@Query('returnTo') returnTo: unknown, @Query('relaunch') relaunch: unknown, @Res() res: Response): Promise<void> {
     res.setHeader('Cache-Control', 'no-store');
     try {
       const state = randomToken();
@@ -66,10 +69,10 @@ export class AuthController {
 
       await this.db.query(
         `INSERT INTO ecr.oidc_login_state
-           (state_hash, browser_binding_hash, nonce, code_verifier_enc, return_to, purpose, expires_at)
-         VALUES ($1, $2, $3, $4, $5, 'LOGIN', now() + make_interval(mins => $6))`,
+           (state_hash, browser_binding_hash, nonce, code_verifier_enc, return_to, purpose, relaunch, expires_at)
+         VALUES ($1, $2, $3, $4, $5, 'LOGIN', $7, now() + make_interval(mins => $6))`,
         [sha256(state), sha256(browserBinding), nonce, encrypt(this.config.encryptionKey, verifier),
-          safeReturnTo(returnTo), this.config.loginStateMinutes],
+          safeReturnTo(returnTo), this.config.loginStateMinutes, relaunch === '1'],
       );
       res.cookie(cookieNames(this.config).login, browserBinding, loginCookieOptions(this.config));
       res.redirect(302, url);
@@ -92,23 +95,37 @@ export class AuthController {
       if (typeof q.error === 'string') {
         throw new ApiError(401, 'LOGIN_HUB_ERROR', 'DWS Hub did not complete sign-in.', { hubError: q.error.slice(0, 100) });
       }
-      if (typeof q.state !== 'string' || typeof q.code !== 'string') {
-        throw new ApiError(400, 'LOGIN_STATE_INVALID', 'Sign-in expired, please try again.');
-      }
-
       // Single use: the row is deleted whether or not the rest succeeds.
-      const { rows } = await this.db.query<LoginStateRow>(
-        `DELETE FROM ecr.oidc_login_state WHERE state_hash = $1
-         RETURNING browser_binding_hash, nonce, code_verifier_enc, return_to, expires_at > now() AS fresh`,
-        [sha256(q.state)],
-      );
-      const st = rows[0];
+      const st = typeof q.state === 'string'
+        ? (await this.db.query<LoginStateRow>(
+          `DELETE FROM ecr.oidc_login_state WHERE state_hash = $1
+           RETURNING browser_binding_hash, nonce, code_verifier_enc, return_to, relaunch, expires_at > now() AS fresh`,
+          [sha256(q.state)],
+        )).rows[0]
+        : undefined;
       const browserBinding = req.cookies?.[names.login];
-      if (!st || !st.fresh || typeof browserBinding !== 'string' || !safeEqual(sha256(browserBinding), st.browser_binding_hash)) {
-        throw new ApiError(400, 'LOGIN_STATE_INVALID', 'Sign-in expired, please try again.');
+      const problem =
+        typeof q.state !== 'string' || typeof q.code !== 'string' ? 'NO_STATE_OR_CODE'
+        : !st ? 'UNKNOWN_STATE'
+        : !st.fresh ? 'EXPIRED'
+        : typeof browserBinding !== 'string' ? 'NO_BROWSER_COOKIE'
+        : !safeEqual(sha256(browserBinding), st.browser_binding_hash) ? 'OTHER_BROWSER'
+        : null;
+      if (problem || !st || typeof q.code !== 'string') {
+        // Not a sign-in this browser started: a launch from the DWS Hub dashboard (the Hub starts the authorization
+        // itself, so ECR has no state or PKCE verifier for it), a replayed or expired callback, or one opened in
+        // another browser. Its code is never redeemed. ECR starts its own sign-in instead, once: with the Hub
+        // session already open that is a silent round trip, and the person lands signed in.
+        if (!st?.relaunch && req.cookies?.[names.relaunch] !== '1') {
+          await this.recordAnonymous('LOGIN_RELAUNCHED', ctx, { reason: problem });
+          res.cookie(names.relaunch, '1', relaunchCookieOptions(this.config));
+          res.redirect(302, `/api/auth/login?relaunch=1&returnTo=${encodeURIComponent(st?.return_to ?? '/')}`);
+          return;
+        }
+        throw new ApiError(400, 'LOGIN_STATE_INVALID', 'Sign-in expired, please try again.', { reason: problem });
       }
 
-      const idToken = await this.oidc.exchangeCode(q.code, decrypt(this.config.encryptionKey, st.code_verifier_enc));
+      const idToken = await this.oidc.exchangeCode(String(q.code), decrypt(this.config.encryptionKey, st.code_verifier_enc));
       const claims = await this.oidc.verifyIdToken(idToken, st.nonce);
       const { issuer } = await this.oidc.getDiscovery();
 
@@ -133,6 +150,7 @@ export class AuthController {
         return created;
       });
 
+      res.clearCookie(names.relaunch, relaunchCookieClearOptions(this.config));
       res.cookie(names.session, token, sessionCookieOptions(this.config));
       res.redirect(302, st.return_to);
     } catch (err) {
@@ -232,17 +250,22 @@ export class AuthController {
   private async failSignIn(err: unknown, ctx: { ip: string; userAgent?: string }, res: Response): Promise<void> {
     const code = err instanceof ApiError ? err.code : 'INTERNAL';
     if (!(err instanceof ApiError)) this.logger.error(err);
+    await this.recordAnonymous(
+      code === 'INTERNAL' ? 'LOGIN_ERROR' : code,
+      ctx,
+      err instanceof ApiError ? (err.details ?? null) : null,
+      err instanceof ApiError && typeof err.details?.userId === 'string' ? err.details.userId : null,
+    );
+    // The next attempt (Try again, or another launch from the Hub) may restart by itself again.
+    res.clearCookie(cookieNames(this.config).relaunch, relaunchCookieClearOptions(this.config));
+    res.redirect(302, `/signin-error?reason=${encodeURIComponent(code)}`);
+  }
+
+  private async recordAnonymous(action: string, ctx: { ip: string; userAgent?: string }, after: Record<string, unknown> | null, userId: string | null = null) {
     try {
-      await this.audit.record(this.db.pool, {
-        action: code === 'INTERNAL' ? 'LOGIN_ERROR' : code,
-        actorKind: 'ANONYMOUS',
-        actorUserId: err instanceof ApiError && typeof err.details?.userId === 'string' ? err.details.userId : null,
-        ...ctx,
-        after: err instanceof ApiError ? (err.details ?? null) : null,
-      });
+      await this.audit.record(this.db.pool, { action, actorKind: 'ANONYMOUS', actorUserId: userId, ...ctx, after });
     } catch (auditErr) {
       this.logger.error(auditErr);
     }
-    res.redirect(302, `/signin-error?reason=${encodeURIComponent(code)}`);
   }
 }

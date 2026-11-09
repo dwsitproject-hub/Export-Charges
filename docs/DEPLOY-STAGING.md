@@ -268,6 +268,7 @@ schema; a migration that must be undone needs a new migration.
 | `403 NETWORK_NOT_ALLOWED` | The user's address is outside `ALLOWED_NETWORKS`. |
 | Sign-in ends on *DWS Hub is unavailable* | The BE server cannot reach the Hub, or `HUB_ISSUER` is wrong (`docker logs ecr-api-staging`). |
 | Sign-in ends on *could not be verified* | `HUB_ISSUER` differs from the Hub's `issuer`, or `OIDC_CLIENT_ID` from the registration. |
+| Sign-in ends on *Your sign-in expired* | ECR already restarts a sign-in it cannot use once by itself (a launch from the Hub dashboard, an old or replayed link): this message means the restart failed too, usually because the browser blocks cookies for the ECR address. `LOGIN_RELAUNCHED` and `LOGIN_STATE_INVALID` in the audit log give the reason. |
 | Hub SDK: `403 origin_not_allowed` | Add `http://172.28.92.56:3160` under SDK → Allowed origins. |
 | Users show as anonymous in the Hub | They signed in before the SDK was added; next sign-in identifies them. |
 

@@ -7,8 +7,18 @@ import type { AppConfig } from '../config';
  */
 export function cookieNames(config: AppConfig) {
   return config.cookieSecure
-    ? { session: '__Host-ecr_sid', login: '__Secure-ecr_login' }
-    : { session: 'ecr_sid', login: 'ecr_login' };
+    ? { session: '__Host-ecr_sid', login: '__Secure-ecr_login', relaunch: '__Secure-ecr_relaunch' }
+    : { session: 'ecr_sid', login: 'ecr_login', relaunch: 'ecr_relaunch' };
+}
+
+/** Marks a sign-in ECR just restarted by itself, so an unusable callback is never restarted twice in a row. */
+export function relaunchCookieOptions(config: AppConfig): CookieOptions {
+  return { httpOnly: true, secure: config.cookieSecure, sameSite: 'lax', path: '/api/auth', maxAge: 60 * 1000 };
+}
+
+export function relaunchCookieClearOptions(config: AppConfig): CookieOptions {
+  const { maxAge: _maxAge, ...rest } = relaunchCookieOptions(config);
+  return rest;
 }
 
 export function sessionCookieOptions(config: AppConfig): CookieOptions {
