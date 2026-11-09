@@ -51,11 +51,15 @@ confirm a code before sensitive actions — DWS Hub does not yet report MFA (Tec
 | Method and path | Access | Notes |
 |---|---|---|
 | `GET /api/auth/login?returnTo=` · `GET /api/auth/callback` | public (allow-listed network) | DWS Hub sign-in; also the launch URL to register in the Hub |
-| `GET /api/auth/me` | signed in | Profile, roles, permissions, `hubSubject` (DWS Hub `sub`, for the Hub SDK), TOTP status, CSRF token |
+| `GET /api/auth/me` | signed in | Profile, roles, permissions, `hubSubject` (DWS Hub `sub`, for the Hub SDK), `tourSeenAt`, TOTP status, CSRF token |
+| `POST /api/auth/tour-seen` | signed in | The first-sign-in app tour was finished or closed; it is not shown automatically again (the *Tour* button replays it) |
 | `POST /api/auth/logout` | signed in (idempotent) | `{"allSessions": true}` signs out every browser |
 | `GET /api/auth/totp/status` · `POST /api/auth/totp/enroll` · `POST /api/auth/totp/confirm` | signed in | Authenticator setup; confirm returns 10 recovery codes once |
 | `POST /api/auth/step-up` | signed in | `{"code"}` or `{"recoveryCode"}`; valid 5 minutes |
 | `GET /api/admin/users?q=&status=&role=` · `GET /api/admin/users/{id}` | `user.manage` | |
+| `POST /api/admin/users` | `user.manage` + step-up | `{"email", "fullName", "department", "roles": [...], "reason"}`: adds a person as INVITED; their first DWS Hub sign-in with that email links and activates the account with those roles; 409 `EMAIL_TAKEN` |
+| `PATCH /api/admin/users/{id}` | `user.manage` + step-up | `{"fullName", "department", "email", "reason"}`; the email only while INVITED (then 409 `EMAIL_FROM_HUB`) |
+| `DELETE /api/admin/users/{id}` | `user.manage` + step-up | `{"reason"}`: an unused INVITED account is removed (`REMOVED`); one with history is anonymised — roles, sessions, authenticator, follows and Hub link removed, name and email erased, DEACTIVATED and hidden (`ANONYMISED`), so the person can be added again. Never yourself; at least two Super Admins remain |
 | `PUT /api/admin/users/{id}/roles` | `user.manage` + step-up | `{"roles": [...], "reason": "..."}`; ends the user's sessions |
 | `POST /api/admin/users/{id}/deactivate` · `/reactivate` · `/reset-totp` | `user.manage` + step-up | `{"reason"}` required |
 | `POST /api/admin/users/{id}/revoke-sessions` | `user.manage` | `{"reason"}` required |

@@ -569,3 +569,47 @@ a.palm-row:hover strong { color: var(--accent-strong); }
   .palm-row .chg, .palm-row .tot { text-align: left; white-space: normal; display: flex; flex-direction: column; }
   .palm-row .chg::before, .palm-row .tot::before { content: attr(data-label); font-size: 12px; font-weight: 600; color: var(--muted); }
 }
+
+/* The app tour: a dimmed page with one part highlighted, and a card explaining it. */
+.tour-button { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px 0 12px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--ink-2); font-weight: 650; font-size: 14px; }
+.tour-button:hover:not(:disabled) { background: var(--subtle); }
+.tour { position: fixed; inset: 0; z-index: 1000; }
+.tour-shade { position: fixed; inset: 0; background: rgba(20, 16, 12, 0.6); pointer-events: none; }
+.tour-shade.hole { inset: auto; background: transparent; border-radius: 14px; box-shadow: 0 0 0 9999px rgba(20, 16, 12, 0.6); outline: 3px solid var(--cta); outline-offset: 0; }
+.tour-card { position: fixed; z-index: 1; background: var(--panel); color: var(--ink); border-radius: 18px; padding: 20px 22px 18px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3); opacity: 0; transition: opacity 0.15s; outline: none; }
+@media (prefers-reduced-motion: reduce) { .tour-card { transition: none; } }
+.tour-card.ready { opacity: 1; }
+.tour-card .tour-count { margin: 0 0 4px; font-size: 12px; font-weight: 750; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+.tour-card h2 { margin: 0 0 8px; font-size: 20px; line-height: 1.25; }
+.tour-card p#tour-body { margin: 0; font-size: 15px; line-height: 1.5; color: var(--ink-2); }
+.tour-dots { display: flex; gap: 6px; margin: 16px 0 14px; }
+.tour-dots span { width: 7px; height: 7px; border-radius: 999px; background: var(--line-strong); }
+.tour-dots span.on { width: 20px; background: var(--accent); }
+.tour-actions { display: flex; align-items: center; gap: 8px; }
+.tour-actions .spacer { flex: 1; }
+.tour-actions button.link { color: var(--muted); text-decoration: none; font-size: 14px; }
+.tour-actions button.link:hover { color: var(--ink); text-decoration: underline; }
+@media (max-width: 600px) {
+  .tour-button { width: 44px; padding: 0; justify-content: center; }
+  .tour-button .label { display: none; }
+  .tour-card { padding: 18px 18px 16px; }
+}
+
+/* Users administration */
+.users-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.users-table th { text-align: left; font-size: 13px; color: var(--muted); font-weight: 700; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.users-table td { padding: 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.users-table tr.selected td { background: var(--accent-soft); }
+.tag.ok { background: var(--ok); color: var(--ok-ink); }
+.user-panel { margin: 0 0 24px; }
+.user-panel h3 { margin: 0 0 10px; font-size: 16px; }
+.user-section { border-top: 1px solid var(--line); padding-top: 16px; margin-top: 16px; }
+.user-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.user-panel .reason { margin-bottom: 4px; }
+.role-picker { border: 0; padding: 0; margin: 0 0 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+.role-picker legend { font-weight: 650; margin-bottom: 6px; padding: 0; }
+.role-picker label { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; cursor: pointer; }
+.role-picker label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.role-picker label.disabled { opacity: 0.55; cursor: not-allowed; }
+.role-picker label span { display: flex; flex-direction: column; }
+.role-picker small { color: var(--muted); font-size: 12px; }

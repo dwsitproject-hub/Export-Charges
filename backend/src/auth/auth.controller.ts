@@ -166,12 +166,16 @@ export class AuthController {
     const { roles, permissions, privileged, totpRequired } = await this.sessions.access(user.id);
     const { enrolled } = await this.totp.status(this.db.pool, user.id);
     // The DWS Hub user id (OIDC `sub`) for this Hub, which the web app reports to the Hub SDK (DwsHub.identify).
+    const { rows: [tour] } = await this.db.query<{ tour_seen_at: Date | null }>('SELECT tour_seen_at FROM ecr.app_user WHERE id = $1', [user.id]);
     const { rows: [hub] } = await this.db.query<{ subject: string }>(
       `SELECT subject FROM ecr.user_identity WHERE user_id = $1 AND provider = 'DWS_HUB' AND issuer = $2 ORDER BY last_seen_at DESC NULLS LAST LIMIT 1`,
       [user.id, this.config.hubIssuer],
     );
     return {
-      user: { id: user.id, email: user.email, fullName: user.full_name, roles, permissions, privileged, hubSubject: hub?.subject ?? null },
+      user: {
+        id: user.id, email: user.email, fullName: user.full_name, roles, permissions, privileged, hubSubject: hub?.subject ?? null,
+        tourSeenAt: tour?.tour_seen_at ?? null,
+      },
       totp: { enrolled, required: totpRequired, enrollmentRequired: totpRequired && !enrolled },
       session: {
         id: session.id,
@@ -184,6 +188,17 @@ export class AuthController {
       csrfToken: session.csrf_token,
       hubDashboardUrl: this.config.hubDashboardUrl,
     };
+  }
+
+  /** The first-sign-in tour was finished or closed: it is not shown automatically again (replay stays possible). */
+  @Post('tour-seen')
+  @HttpCode(200)
+  @UseGuards(SessionGuard)
+  async tourSeen(@Req() req: EcrRequest) {
+    const { rows: [r] } = await this.db.query<{ tour_seen_at: Date }>(
+      'UPDATE ecr.app_user SET tour_seen_at = COALESCE(tour_seen_at, now()) WHERE id = $1 RETURNING tour_seen_at', [req.ecr!.user.id],
+    );
+    return { tourSeenAt: r.tour_seen_at };
   }
 
   /**

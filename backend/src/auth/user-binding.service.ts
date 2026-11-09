@@ -68,6 +68,38 @@ export class UserBindingService {
       throw new ApiError(403, 'LOGIN_NO_EMAIL', 'DWS Hub did not provide an email for this account.', { hubSubject: claims.sub });
     }
 
+    // An administrator added this person before their first sign-in (Users → Add user): the account waits, INVITED and
+    // not linked to any Hub identity, for exactly this email. Their first sign-in links it and keeps the roles chosen.
+    const invited = await client.query<{ id: string; email: string; full_name: string }>(
+      `SELECT u.id, u.email, u.full_name FROM ecr.app_user u
+        WHERE u.email = $1 AND u.status = 'INVITED' AND u.pseudonymised_at IS NULL
+          AND NOT EXISTS (SELECT 1 FROM ecr.user_identity i WHERE i.user_id = u.id)
+        FOR UPDATE`,
+      [claims.email],
+    );
+    if (invited.rows[0]) {
+      const u = invited.rows[0];
+      await client.query(
+        `UPDATE ecr.app_user SET status = 'ACTIVE', full_name = COALESCE($2, full_name), last_login_at = now(), updated_at = now() WHERE id = $1`,
+        [u.id, claims.name ?? null],
+      );
+      await client.query(
+        `INSERT INTO ecr.user_identity (user_id, provider, subject, issuer, email_at_link, last_seen_at)
+         VALUES ($1, 'DWS_HUB', $2, $3, $4, now())`,
+        [u.id, claims.sub, issuer, claims.email],
+      );
+      await this.audit.record(client, {
+        action: 'USER_INVITE_ACCEPTED',
+        actorKind: 'SYSTEM',
+        ip: ctx.ip,
+        userAgent: ctx.userAgent,
+        entityType: 'APP_USER',
+        entityId: u.id,
+        after: { provider: 'DWS_HUB', hubSubject: claims.sub, email: claims.email, status: 'ACTIVE' },
+      });
+      return { id: u.id, email: u.email, fullName: claims.name ?? u.full_name, provisioned: false };
+    }
+
     // Another Hub identity already owns this email. Linking it silently could hand one person's
     // account to another, so an administrator has to resolve it.
     const clash = await client.query<{ id: string }>('SELECT id FROM ecr.app_user WHERE email = $1', [claims.email]);

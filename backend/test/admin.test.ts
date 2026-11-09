@@ -220,6 +220,79 @@ describe('authenticator step-up, user administration and audit log', () => {
 
   // ------------------------------------------------------------------ audit log
 
+  describe('adding, editing and deleting users', () => {
+    const del = (p: Person, path: string, body: object) => p.agent.delete(path).set('X-CSRF-Token', p.me.csrfToken).send(body);
+    const patch = (p: Person, path: string, body: object) => p.agent.patch(path).set('X-CSRF-Token', p.me.csrfToken).send(body);
+
+    it('adds a person before their first sign-in; their first DWS Hub sign-in links the account with its roles', async () => {
+      const person = h.newUser();
+      const created = await post(superA, '/api/admin/users', { email: person.email!.toUpperCase(), fullName: 'Nadia Putri', department: 'Trade', roles: ['CHECKER'], reason: 'New Checker for palm' }).expect(201);
+      expect(created.body).toMatchObject({ email: person.email, fullName: 'Nadia Putri', department: 'Trade', status: 'INVITED', roles: ['CHECKER'] });
+      await post(superA, '/api/admin/users', { email: person.email, fullName: 'Again', roles: ['VIEWER'], reason: 'Duplicate' }).expect(409);
+      await post(superA, '/api/admin/users', { email: 'not-an-email', fullName: 'X', roles: ['VIEWER'], reason: 'Bad email' }).expect(400);
+      await post(superA, '/api/admin/users', { email: h.newUser().email, fullName: 'No role', roles: [], reason: 'No role' }).expect(400);
+
+      const agent = request.agent(h.server);
+      const { res } = await h.signIn(agent, person);
+      expect(res.headers.location).toBe('/catalogue');
+      const me = await h.me(agent);
+      expect(me.user.id).toBe(created.body.id);
+      expect(me.user.roles).toEqual(['CHECKER']);
+      expect((await superA.agent.get(`/api/admin/users/${created.body.id}`).expect(200)).body.status).toBe('ACTIVE');
+      const { rows } = await h.pool.query(`SELECT action FROM ecr.audit_event WHERE entity_id = $1 ORDER BY chain_seq`, [created.body.id]);
+      expect(rows.map((r) => r.action)).toEqual(['USER_CREATED', 'USER_INVITE_ACCEPTED']);
+    });
+
+    it('only a Super Admin adds administrators', async () => {
+      const admin = await privileged(['USER_ADMIN']);
+      const refused = await post(admin, '/api/admin/users', { email: h.newUser().email, fullName: 'Admin', roles: ['SUPER_ADMIN'], reason: 'Try' }).expect(403);
+      expect(refused.body.error.code).toBe('FORBIDDEN');
+      await post(admin, '/api/admin/users', { email: h.newUser().email, fullName: 'Viewer', roles: ['VIEWER'], reason: 'Ordinary user' }).expect(201);
+      await post(superA, '/api/admin/users', { email: h.newUser().email, fullName: 'Second admin', roles: ['USER_ADMIN'], reason: 'Admin cover' }).expect(201);
+    });
+
+    it('edits name and department; the email only before the first sign-in', async () => {
+      const invited = (await post(superA, '/api/admin/users', { email: h.newUser().email, fullName: 'Typo Nmae', roles: ['VIEWER'], reason: 'Add' }).expect(201)).body;
+      const fixed = await patch(superA, `/api/admin/users/${invited.id}`, { fullName: 'Typo Name', department: 'Finance', email: 'right.address@corp.example', reason: 'Fix details' }).expect(200);
+      expect(fixed.body).toMatchObject({ fullName: 'Typo Name', department: 'Finance', email: 'right.address@corp.example' });
+
+      const { me } = await h.signedIn(['VIEWER']);
+      await patch(superA, `/api/admin/users/${me.user.id}`, { department: 'Logistics', reason: 'Moved team' }).expect(200);
+      const refused = await patch(superA, `/api/admin/users/${me.user.id}`, { email: 'other@corp.example', reason: 'Change email' }).expect(409);
+      expect(refused.body.error.code).toBe('EMAIL_FROM_HUB');
+      await patch(superA, `/api/admin/users/${superA.me.user.id}`, { department: 'Me', reason: 'Myself' }).expect(403);
+    });
+
+    it('deletes an unused account entirely, and anonymises one with history so the person can be added again', async () => {
+      const unused = (await post(superA, '/api/admin/users', { email: h.newUser().email, fullName: 'Never came', roles: ['VIEWER'], reason: 'Add' }).expect(201)).body;
+      expect((await del(superA, `/api/admin/users/${unused.id}`, { reason: 'Not joining' }).expect(200)).body).toEqual({ id: unused.id, result: 'REMOVED' });
+      await superA.agent.get(`/api/admin/users/${unused.id}`).expect(404);
+
+      const { agent, me, user } = await h.signedIn(['MAKER']);
+      await del(superA, `/api/admin/users/${me.user.id}`, { reason: 'x' }).expect(400);
+      expect((await del(superA, `/api/admin/users/${me.user.id}`, { reason: 'Left the company' }).expect(200)).body.result).toBe('ANONYMISED');
+      await agent.get('/api/auth/me').expect(401);
+      const list = (await superA.agent.get(`/api/admin/users?q=${encodeURIComponent(user.email!)}`).expect(200)).body;
+      expect(list).toEqual([]);
+      const { rows: [gone] } = await h.pool.query('SELECT email, full_name, status FROM ecr.app_user WHERE id = $1', [me.user.id]);
+      expect(gone).toEqual({ email: `deleted-${me.user.id}@ecr.invalid`, full_name: 'Deleted user', status: 'DEACTIVATED' });
+
+      // The same person comes back: added again, and their Hub sign-in reaches the new account.
+      const again = (await post(superA, '/api/admin/users', { email: user.email, fullName: 'Returning', roles: ['VIEWER'], reason: 'Rejoined' }).expect(201)).body;
+      const back = request.agent(h.server);
+      await h.signIn(back, user);
+      expect((await h.me(back)).user.id).toBe(again.id);
+    });
+
+    it('keeps two Super Admins and never deletes yourself', async () => {
+      await del(superA, `/api/admin/users/${superA.me.user.id}`, { reason: 'Myself' }).expect(403);
+      const admin = await privileged(['USER_ADMIN']);
+      expect((await del(admin, `/api/admin/users/${superB.me.user.id}`, { reason: 'Not allowed' }).expect(403)).body.error.code).toBe('FORBIDDEN');
+      const refused = await del(superA, `/api/admin/users/${superB.me.user.id}`, { reason: 'Only two left' }).expect(409);
+      expect(refused.body.error.code).toBe('SUPER_ADMIN_MINIMUM');
+    });
+  });
+
   describe('audit log API', () => {
     it('lets a Super Admin search events and verify the hash chain', async () => {
       const res = await superA.agent.get('/api/audit-events?action=ROLES_CHANGED&limit=2').expect(200);

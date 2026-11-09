@@ -191,7 +191,7 @@ function Home({ me }: { me: Me }) {
           <p className="eyebrow">{greeting()}, {firstName}</p>
           <h1 id="hero-title">Check a product</h1>
           <p className="lead">Type a product name or HS code. You'll see the export duty and levy for shipping it today, in plain words, with the regulation behind it.</p>
-          <form className="big-search" role="search" onSubmit={search}>
+          <form className="big-search" role="search" onSubmit={search} data-tour="search">
             <label className="field">
               <span className="sr-only">Product name or HS code</span>
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>

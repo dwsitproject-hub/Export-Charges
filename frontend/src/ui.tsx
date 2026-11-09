@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { ApiFailure, logout, Me, stepUp, unreadNotifications } from './api';
 import { hubReset } from './hubSdk';
+import { startTour, TourHost } from './tour';
 
 /** The signed-in person, set once by App; the shell reads it to show only the pages they may use. */
 export const MeContext = createContext<Me | null>(null);
@@ -136,12 +137,12 @@ function Shell({ me, title, wide, actions, bare, intro, children }: {
       <header className="topbar">
         <div className="topbar-inner">
           <Brand />
-          <nav className="tabs" aria-label="Main">
+          <nav className="tabs" aria-label="Main" data-tour="nav">
             {tabs.map((t) => (
               <a key={t.href} href={t.href} aria-current={t === currentTab ? 'page' : undefined}>{t.label}</a>
             ))}
             {groups.length > 0 && (
-              <details className={`more${inMore ? ' current' : ''}`} ref={more}>
+              <details className={`more${inMore ? ' current' : ''}`} ref={more} data-tour="more">
                 <summary>
                   More tools
                   <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 9l6 6 6-6" /></svg>
@@ -162,7 +163,13 @@ function Shell({ me, title, wide, actions, bare, intro, children }: {
             )}
           </nav>
           <span className="spacer" />
-          <a className="icon-link" href="/notifications" aria-label={unread ? `Notifications, ${unread} unread` : 'Notifications'} title="Notifications">
+          <button type="button" className="tour-button" onClick={startTour} data-tour="tour-button" title="Take the app tour" aria-label="Take the app tour">
+            <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="9.5" /><path d="M9.3 9a2.8 2.8 0 0 1 5.4 1c0 1.9-2.7 2.5-2.7 4" /><path d="M12 17.2h.01" />
+            </svg>
+            <span className="label">Tour</span>
+          </button>
+          <a className="icon-link" data-tour="bell" href="/notifications" aria-label={unread ? `Notifications, ${unread} unread` : 'Notifications'} title="Notifications">
             <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
             </svg>
@@ -186,6 +193,7 @@ function Shell({ me, title, wide, actions, bare, intro, children }: {
         {!bare && intro && <p className="intro">{intro}</p>}
         {children}
       </main>
+      <TourHost me={me} />
     </div>
   );
 }
@@ -223,6 +231,7 @@ function UserMenu({ me }: { me: Me }) {
         </div>
         <a href="/settings/authenticator">Authenticator {me.totp.enrolled ? '' : '(not set up)'}</a>
         <a href="/notifications">Notifications and following</a>
+        <button type="button" onClick={() => { if (menu.current) menu.current.open = false; startTour(); }}>Take the app tour again</button>
         <button type="button" disabled={busy} onClick={() => signOut(false)}>Sign out</button>
         <button type="button" disabled={busy} onClick={() => signOut(true)}>Sign out of all browsers</button>
         <ErrorText error={error} />

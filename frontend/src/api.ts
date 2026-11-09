@@ -1,5 +1,5 @@
 export interface Me {
-  user: { id: string; email: string; fullName: string; roles: string[]; permissions: string[]; privileged: boolean; hubSubject: string | null };
+  user: { id: string; email: string; fullName: string; roles: string[]; permissions: string[]; privileged: boolean; hubSubject: string | null; tourSeenAt: string | null };
   totp: { enrolled: boolean; required: boolean; enrollmentRequired: boolean };
   session: { id: string; authMethod: string; absoluteExpiresAt: string; idleTimeoutMinutes: number; steppedUpAt: string | null };
   csrfToken: string;
@@ -92,6 +92,12 @@ export const setUserRoles = (id: string, roles: string[], reason: string) =>
   api<UserSummary>(`/admin/users/${id}/roles`, { method: 'PUT', body: { roles, reason } });
 export const userAction = (id: string, action: 'deactivate' | 'reactivate' | 'reset-totp' | 'revoke-sessions', reason: string) =>
   api<unknown>(`/admin/users/${id}/${action}`, { method: 'POST', body: { reason } });
+export const createUser = (input: { email: string; fullName: string; department: string; roles: string[]; reason: string }) =>
+  api<UserSummary>('/admin/users', { method: 'POST', body: input });
+export const updateUser = (id: string, input: { email?: string; fullName?: string; department?: string; reason: string }) =>
+  api<UserSummary>(`/admin/users/${id}`, { method: 'PATCH', body: input });
+export const deleteUser = (id: string, reason: string) =>
+  api<{ id: string; result: 'REMOVED' | 'ANONYMISED' }>(`/admin/users/${id}`, { method: 'DELETE', body: { reason } });
 
 // ---------------------------------------------------------------- registry and change sets
 

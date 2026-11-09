@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Put, Query, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put, Query, Req } from '@nestjs/common';
 import { actorOf } from '../auth/actor';
 import { Authorize, AuthorizedRequest } from '../auth/authorize';
 import { ApiError } from '../common/api-error';
@@ -26,6 +26,26 @@ export class UsersAdminController {
     const limit = Math.min(Math.max(Number(q.limit ?? 50) || 50, 1), 200);
     const offset = Math.max(Number(q.offset ?? 0) || 0, 0);
     return this.users.list({ q: q.q?.slice(0, 100) || undefined, status: q.status || undefined, role: q.role?.toUpperCase() || undefined, limit, offset });
+  }
+
+  /** Adds a person before their first DWS Hub sign-in, with their roles (INVITED until they sign in). */
+  @Post()
+  @Authorize({ permissions: ['user.manage'], stepUp: true })
+  create(@Body() b: unknown, @Req() req: AuthorizedRequest) {
+    return this.users.create(actorOf(req), body(b));
+  }
+
+  @Patch(':id')
+  @Authorize({ permissions: ['user.manage'], stepUp: true })
+  update(@Param('id') id: string, @Body() b: unknown, @Req() req: AuthorizedRequest) {
+    return this.users.update(actorOf(req), targetId(id), body(b));
+  }
+
+  /** Body { reason }. Removes a never-used account, or anonymises one with history. */
+  @Delete(':id')
+  @Authorize({ permissions: ['user.manage'], stepUp: true })
+  remove(@Param('id') id: string, @Body() b: unknown, @Req() req: AuthorizedRequest) {
+    return this.users.remove(actorOf(req), targetId(id), body(b).reason);
   }
 
   @Get(':id')

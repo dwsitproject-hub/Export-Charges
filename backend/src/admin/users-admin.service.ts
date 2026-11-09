@@ -63,6 +63,27 @@ function toSummary(r: UserRow): UserSummary {
   };
 }
 
+const EMAIL = /^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/;
+
+function text(v: unknown, field: string, max: number, required: boolean): string | null {
+  const s = typeof v === 'string' ? v.trim() : '';
+  if (!s) {
+    if (required) throw new ApiError(400, 'INVALID_INPUT', `${field} is required.`, { fields: [{ field, message: 'Required.' }] });
+    return null;
+  }
+  if (s.length > max) throw new ApiError(400, 'INVALID_INPUT', `${field} is too long (at most ${max} characters).`, { fields: [{ field, message: 'Too long.' }] });
+  return s;
+}
+
+function email(v: unknown): string {
+  const e = text(v, 'email', 254, true)!.toLowerCase();
+  if (!EMAIL.test(e)) throw new ApiError(400, 'INVALID_INPUT', 'Enter a valid email address.', { fields: [{ field: 'email', message: 'Not an email address.' }] });
+  return e;
+}
+
+/** The account ECR's automatic updates are recorded under (migration 0017): not a person, never listed or changed. */
+const SYSTEM_ACCOUNT = '00000000-0000-0000-0000-00000000ec01';
+
 function requireReason(reason: unknown): string {
   if (typeof reason !== 'string' || reason.trim().length < 3) {
     throw new ApiError(400, 'INVALID_INPUT', 'A reason of at least 3 characters is required.');
@@ -89,6 +110,7 @@ export class UsersAdminService {
       `${USER_SELECT}
         WHERE ($1::text IS NULL OR u.email ILIKE $1 OR u.full_name ILIKE $1)
           AND ($2::text IS NULL OR u.status = $2)
+          AND u.pseudonymised_at IS NULL AND u.id <> '00000000-0000-0000-0000-00000000ec01'
         GROUP BY u.id, lc.totp_confirmed_at
        HAVING ($3::text IS NULL OR $3 = ANY (array_agg(r.code)))
         ORDER BY u.full_name, u.id
@@ -102,6 +124,103 @@ export class UsersAdminService {
     const { rows } = await this.db.query<UserRow>(`${USER_SELECT} WHERE u.id = $1 GROUP BY u.id, lc.totp_confirmed_at`, [id]);
     if (!rows[0]) throw new ApiError(404, 'NOT_FOUND', 'User not found.');
     return toSummary(rows[0]);
+  }
+
+  /**
+   * Adds a person before their first sign-in: an INVITED account with its roles. Their first DWS Hub sign-in with this
+   * email links the Hub identity to it and makes it ACTIVE (UserBindingService); until then it cannot be used.
+   */
+  async create(actor: Actor, input: Record<string, unknown>): Promise<UserSummary> {
+    const reason = requireReason(input.reason);
+    const mail = email(input.email);
+    const fullName = text(input.fullName, 'fullName', 200, true)!;
+    const department = text(input.department, 'department', 200, false);
+    const roles = Array.isArray(input.roles)
+      ? [...new Set((input.roles as unknown[]).filter((r): r is string => typeof r === 'string').map((r) => r.trim().toUpperCase()))].sort()
+      : [];
+    if (!roles.length) throw new ApiError(400, 'INVALID_INPUT', 'Give the person at least one role.', { fields: [{ field: 'roles', message: 'Choose at least one role.' }] });
+    const id = await this.db.tx(async (c) => {
+      const { rows: taken } = await c.query('SELECT 1 FROM ecr.app_user WHERE email = $1', [mail]);
+      if (taken.length) throw new ApiError(409, 'EMAIL_TAKEN', 'An ECR account with this email already exists.', { fields: [{ field: 'email', message: 'Already has an account.' }] });
+      const { rows: [u] } = await c.query<{ id: string }>(
+        `INSERT INTO ecr.app_user (email, full_name, department, status) VALUES ($1, $2, $3, 'INVITED') RETURNING id`, [mail, fullName, department],
+      );
+      await this.applyRoles(c, actor, u.id, roles, reason, { quiet: true });
+      await this.record(c, actor, 'USER_CREATED', u.id, reason, undefined, { email: mail, fullName, department, status: 'INVITED', roles });
+      return u.id;
+    });
+    return this.get(id);
+  }
+
+  /** Edits the name and department; the email only while the account is still INVITED (afterwards DWS Hub supplies it). */
+  async update(actor: Actor, targetId: string, input: Record<string, unknown>): Promise<UserSummary> {
+    const reason = requireReason(input.reason);
+    await this.db.tx(async (c) => {
+      const target = await this.lockTarget(c, targetId);
+      this.assertMayManage(actor, targetId, await this.liveRoles(c, targetId));
+      const { rows: [before] } = await c.query<{ email: string; full_name: string; department: string | null }>(
+        'SELECT email, full_name, department FROM ecr.app_user WHERE id = $1', [targetId]);
+      const fullName = 'fullName' in input ? text(input.fullName, 'fullName', 200, true)! : before.full_name;
+      const department = 'department' in input ? text(input.department, 'department', 200, false) : before.department;
+      let mail = before.email;
+      if ('email' in input && email(input.email) !== before.email.toLowerCase()) {
+        if (target.status !== 'INVITED') {
+          throw new ApiError(409, 'EMAIL_FROM_HUB', 'The email comes from DWS Hub once the person has signed in; change it in DWS Hub.', { fields: [{ field: 'email', message: 'Set by DWS Hub.' }] });
+        }
+        mail = email(input.email);
+        const { rows: taken } = await c.query('SELECT 1 FROM ecr.app_user WHERE email = $1 AND id <> $2', [mail, targetId]);
+        if (taken.length) throw new ApiError(409, 'EMAIL_TAKEN', 'An ECR account with this email already exists.', { fields: [{ field: 'email', message: 'Already has an account.' }] });
+      }
+      if (fullName === before.full_name && department === before.department && mail === before.email) return;
+      await c.query('UPDATE ecr.app_user SET email = $2, full_name = $3, department = $4, updated_at = now() WHERE id = $1', [targetId, mail, fullName, department]);
+      await this.record(c, actor, 'USER_UPDATED', targetId, reason,
+        { email: before.email, fullName: before.full_name, department: before.department }, { email: mail, fullName, department });
+    });
+    return this.get(targetId);
+  }
+
+  /**
+   * Deletes an account. One that was never used (INVITED, nothing recorded under it) is removed entirely. One with
+   * history is anonymised instead, because change sets, calculations and the audit trail must keep pointing at it:
+   * roles, sessions, authenticator, follows and the DWS Hub link are removed, the name and email are replaced, and it
+   * is DEACTIVATED and hidden from the list. The same person can then be added again.
+   */
+  async remove(actor: Actor, targetId: string, reasonInput: unknown): Promise<{ id: string; result: 'REMOVED' | 'ANONYMISED' }> {
+    const reason = requireReason(reasonInput);
+    return this.db.tx(async (c) => {
+      const target = await this.lockTarget(c, targetId);
+      const roles = await this.liveRoles(c, targetId);
+      this.assertMayManage(actor, targetId, roles);
+      if (roles.includes('SUPER_ADMIN') && target.status === 'ACTIVE') await this.assertSuperAdminsRemain(c, targetId);
+      const { rows: [before] } = await c.query<{ email: string; full_name: string }>('SELECT email, full_name FROM ecr.app_user WHERE id = $1', [targetId]);
+      const was = { email: before.email, fullName: before.full_name, roles, status: target.status };
+
+      if (target.status === 'INVITED') {
+        await c.query('SAVEPOINT remove_user');
+        try {
+          await c.query('DELETE FROM ecr.user_role WHERE user_id = $1', [targetId]);
+          await c.query('DELETE FROM ecr.app_user WHERE id = $1', [targetId]);
+          await this.record(c, actor, 'USER_DELETED', targetId, reason, was, { result: 'REMOVED' });
+          return { id: targetId, result: 'REMOVED' as const };
+        } catch (err) {
+          if ((err as { code?: string }).code !== '23503') throw err; // still referenced somewhere: anonymise instead
+          await c.query('ROLLBACK TO SAVEPOINT remove_user');
+        }
+      }
+
+      await c.query('UPDATE ecr.user_role SET revoked_at = now(), revoked_by = $2 WHERE user_id = $1 AND revoked_at IS NULL', [targetId, actor.id]);
+      const revokedSessions = await this.sessions.revokeAllForUser(c, targetId, 'ADMIN_REVOKE');
+      await c.query('DELETE FROM ecr.user_identity WHERE user_id = $1', [targetId]);
+      await c.query('DELETE FROM ecr.local_credential WHERE user_id = $1', [targetId]);
+      await c.query('DELETE FROM ecr.subscription WHERE user_id = $1', [targetId]);
+      await c.query(
+        `UPDATE ecr.app_user SET email = $2, full_name = 'Deleted user', department = NULL, status = 'DEACTIVATED',
+                deactivated_reason = $3, pseudonymised_at = now(), updated_at = now() WHERE id = $1`,
+        [targetId, `deleted-${targetId}@ecr.invalid`, `Deleted: ${reason}`],
+      );
+      await this.record(c, actor, 'USER_DELETED', targetId, reason, was, { result: 'ANONYMISED', revokedSessions });
+      return { id: targetId, result: 'ANONYMISED' as const };
+    });
   }
 
   /** Replaces the user's roles. Takes effect at once: the user's sessions are ended so access is re-evaluated. */
@@ -124,7 +243,7 @@ export class UsersAdminService {
   }
 
   /** Replaces the user's live roles with `wanted`; false when nothing changed. */
-  private async applyRoles(c: PoolClient, actor: Actor, targetId: string, wanted: string[], reason: string): Promise<boolean> {
+  private async applyRoles(c: PoolClient, actor: Actor, targetId: string, wanted: string[], reason: string, opts: { quiet?: boolean } = {}): Promise<boolean> {
     const target = await this.lockTarget(c, targetId);
     const current = await this.liveRoles(c, targetId);
     this.assertMayManage(actor, targetId, [...current, ...wanted]);
@@ -156,7 +275,7 @@ export class UsersAdminService {
       [targetId, actor.id, added],
     );
     const revokedSessions = await this.sessions.revokeAllForUser(c, targetId, 'ADMIN_REVOKE');
-    await this.record(c, actor, 'ROLES_CHANGED', target.id, reason, { roles: current }, { roles: wanted, added, removed, revokedSessions });
+    if (!opts.quiet) await this.record(c, actor, 'ROLES_CHANGED', target.id, reason, { roles: current }, { roles: wanted, added, removed, revokedSessions });
     return true;
   }
 
@@ -244,7 +363,8 @@ export class UsersAdminService {
   }
 
   private async lockTarget(c: PoolClient, id: string): Promise<{ id: string; status: string }> {
-    const { rows } = await c.query<{ id: string; status: string }>('SELECT id, status FROM ecr.app_user WHERE id = $1 FOR UPDATE', [id]);
+    const { rows } = await c.query<{ id: string; status: string }>(
+      'SELECT id, status FROM ecr.app_user WHERE id = $1 AND pseudonymised_at IS NULL AND id <> $2 FOR UPDATE', [id, SYSTEM_ACCOUNT]);
     if (!rows[0]) throw new ApiError(404, 'NOT_FOUND', 'User not found.');
     return rows[0];
   }

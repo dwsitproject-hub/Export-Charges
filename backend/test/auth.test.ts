@@ -168,6 +168,18 @@ describe('DWS Hub sign-in, session and logout', () => {
     expect(res.headers.location).toBe('/');
   });
 
+  it('remembers that the first-sign-in tour was seen, on every browser', async () => {
+    const { agent, me, user } = await h.signedIn();
+    expect(me.user.tourSeenAt).toBeNull();
+    await agent.post('/api/auth/tour-seen').expect(403);
+    const first = (await agent.post('/api/auth/tour-seen').set('X-CSRF-Token', me.csrfToken).expect(200)).body.tourSeenAt;
+    expect(first).toBeTruthy();
+    await agent.post('/api/auth/tour-seen').set('X-CSRF-Token', me.csrfToken).expect(200);
+    const other = request.agent(h.server);
+    await h.signIn(other, user);
+    expect((await h.me(other)).user.tourSeenAt).toBe(first);
+  });
+
   // ------------------------------------------------------------------ session
 
   it('rejects an idle-expired session and revokes it', async () => {

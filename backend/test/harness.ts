@@ -21,7 +21,7 @@ export type Agent = ReturnType<typeof request.agent>;
 export interface Me {
   csrfToken: string;
   session: { id: string; idleTimeoutMinutes: number; steppedUpAt: string | null };
-  user: { id: string; email: string; roles: string[]; permissions: string[]; privileged: boolean };
+  user: { id: string; email: string; roles: string[]; permissions: string[]; privileged: boolean; tourSeenAt: string | null };
   totp: { enrolled: boolean; required: boolean; enrollmentRequired: boolean };
 }
 

@@ -24,7 +24,7 @@ export function HeroPrices({ data }: { data: CatalogueResponse | null }) {
   const prices = data?.referencePrices.filter((p) => p.value) ?? [];
   if (!prices.length) return null;
   return (
-    <div className="hero-prices">
+    <div className="hero-prices" data-tour="prices">
       {prices.map((p) => (
         <a key={p.seriesId} className="hero-price" href={`/prices/${p.seriesId}`}>
           <span className="k">{p.kind === 'FX_RATE' ? 'Exchange rate (KMK)' : p.kind === 'REFERENCE_PRICE' ? `${p.code} reference price` : p.name}</span>
@@ -57,7 +57,7 @@ export function PalmSpotlight({ data, error }: { data: CatalogueResponse | null;
   const charged = palm.filter((r) => r.totalUsdPerMt !== null && Number(r.totalUsdPerMt) > 0).length;
 
   return (
-    <section className="panel spotlight" aria-labelledby="palm-title">
+    <section className="panel spotlight" aria-labelledby="palm-title" data-tour="spotlight">
       <div className="panel-head">
         <div>
           <p className="spot-eyebrow">In the spotlight</p>
@@ -77,7 +77,7 @@ export function PalmSpotlight({ data, error }: { data: CatalogueResponse | null;
 
       {palm.length > 0 && (
         <>
-          <div className="spot-tools">
+          <div className="spot-tools" data-tour="spot-tools">
             <div className="seg" role="group" aria-label="Product group">
               <button type="button" aria-pressed={!group} onClick={() => setGroup('')}>All <span>{palm.length}</span></button>
               {groups.map(([g, n]) => (
@@ -99,8 +99,8 @@ export function PalmSpotlight({ data, error }: { data: CatalogueResponse | null;
               <span role="columnheader">Export levy (PE)</span>
               <span role="columnheader">Total per tonne</span>
             </div>
-            {shown.map((r) => (
-              <a key={r.productId} className="palm-row" role="row" href={`/find?q=${encodeURIComponent(r.nameEn ?? r.nameId)}&pick=${r.productId}`}>
+            {shown.map((r, i) => (
+              <a key={r.productId} className="palm-row" role="row" data-tour={i === 0 ? 'palm-row' : undefined} href={`/find?q=${encodeURIComponent(r.nameEn ?? r.nameId)}&pick=${r.productId}`}>
                 <span className="nm" role="cell">
                   <strong>{r.nameEn ?? r.nameId}</strong>
                   <small>HS {r.hsCodes.map((h) => `${h.isEx ? 'ex ' : ''}${h.code}`).join(', ')}{r.group ? ` · ${r.group}` : ''}</small>
