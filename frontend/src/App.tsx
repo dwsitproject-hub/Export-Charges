@@ -18,6 +18,7 @@ import { DataQualityPage, JobsPage } from './pages/Jobs';
 import { BulletinPage, NotificationsPage, UnsubscribePage } from './pages/Notifications';
 import { SourcesPage } from './pages/Sources';
 import { SourceWatchPage } from './pages/SourceWatch';
+import { HeroPrices, PalmSpotlight, useTodayCatalogue } from './pages/PalmSpotlight';
 import { Badge, ErrorText, MeContext, Page } from './ui';
 
 const SIGN_IN_ERRORS: Record<string, string> = {
@@ -129,7 +130,7 @@ const dateTime = (d: string) => new Date(d).toLocaleString(undefined, { dateStyl
 const period = (from: string, to: string) =>
   new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).formatRange(new Date(`${from}T00:00:00`), new Date(`${to}T00:00:00`));
 
-/** Home: what waits for this person, the reference prices in force and what was published lately. */
+/** Home: checking a product comes first (search, then every palm oil product with today's charges); other tasks support it. */
 function Home({ me }: { me: Me }) {
   const perms = me.user.permissions;
   const can = (p: string) => perms.includes(p);
@@ -141,8 +142,8 @@ function Home({ me }: { me: Me }) {
   const myDrafts = useOptional<ChangeSetSummary[]>(can('changeset.create'), () => api<ChangeSetSummary[]>('/change-sets?status=DRAFT&mine=true'));
   const reviews = useOptional<ReviewCampaign[]>(can('accessreview.read'), () => api<ReviewCampaign[]>('/admin/reviews'));
   const dq = useOptional<DqSummary>(can('dq.read'), () => api<DqSummary>('/dq/findings'));
-  const prices = useOptional<SeriesView[]>(can('catalogue.read'), () => listRefSeries());
-  const versions = useOptional<DataVersion[]>(can('changeset.read'), () => api<DataVersion[]>('/data-versions?limit=6'));
+  const versions = useOptional<DataVersion[]>(can('changeset.read'), () => api<DataVersion[]>('/data-versions?limit=5'));
+  const catalogue = useTodayCatalogue(can('catalogue.read'));
 
   const accessWaiting = reviews?.filter((r) => r.status === 'OPEN').reduce((n, r) => n + r.waitingForYou, 0);
   const todos: { href: string; n: number | undefined; label: string; hint: string }[] = [];
@@ -161,22 +162,23 @@ function Home({ me }: { me: Me }) {
   return (
     <Page title="Home" wide bare>
       {can('catalogue.read') ? (
-        <section className="hero" aria-labelledby="hero-title">
+        <section className="hero check-hero" aria-labelledby="hero-title">
           <p className="eyebrow">{greeting()}, {firstName}</p>
-          <h1 id="hero-title">What are you exporting today?</h1>
-          <p className="lead">Type a product name or HS code. We'll show the export duty and levy that apply, in plain words, with the regulation behind it.</p>
+          <h1 id="hero-title">Check a product</h1>
+          <p className="lead">Type a product name or HS code. You'll see the export duty and levy for shipping it today, in plain words, with the regulation behind it.</p>
           <form className="big-search" role="search" onSubmit={search}>
             <label className="field">
               <span className="sr-only">Product name or HS code</span>
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
-              <input name="q" type="search" placeholder="e.g. crude palm oil, or 1511.10.00" autoComplete="off" />
+              <input name="q" type="search" placeholder="e.g. crude palm oil, or 1511.10.00" autoComplete="off" autoFocus />
             </label>
-            <button type="submit">Check charges</button>
+            <button type="submit">Check</button>
           </form>
           <div className="chips">
             <span className="label">Often checked:</span>
             {POPULAR.map((p) => <a key={p.q} className="chip" href={`/find?q=${encodeURIComponent(p.q)}`}>{p.label}</a>)}
           </div>
+          <HeroPrices data={catalogue.data} />
         </section>
       ) : (
         <section className="hero">
@@ -186,50 +188,34 @@ function Home({ me }: { me: Me }) {
         </section>
       )}
 
-      <h2 className="section-title">Or pick a task</h2>
-      <div className="task-grid">
-        {can('catalogue.read') && (
-          <a className="task" href="/find">
-            <span className="ico"><Icon d="M21 16V8a2 2 0 00-1-1.7l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.7l7 4a2 2 0 002 0l7-4a2 2 0 001-1.7zM3.3 7L12 12l8.7-5M12 22V12" /></span>
-            <strong>Check a product</strong>
-            <span className="d">See the duty and levy for one product on any date, and the rule it comes from.</span>
-            <span className="go">Find a product →</span>
-          </a>
-        )}
-        {can('calc.run') && (
-          <a className="task levy" href="/calculator">
-            <span className="ico"><Icon d="M6 2h12a2 2 0 012 2v16a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2zM8 6h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 19h8" /></span>
-            <strong>Calculate a shipment</strong>
-            <span className="d">Add your products and tonnes. Get the total to pay in USD and Rupiah, ready to save or print.</span>
-            <span className="go">Start calculating →</span>
-          </a>
-        )}
-        {can('catalogue.read') && (
-          <a className="task violet" href="/updates">
-            <span className="ico"><Icon d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6M9 13h6M9 17h4" /></span>
-            <strong>See what changed</strong>
-            <span className="d">New regulations and this period's reference prices, one line each.</span>
-            <span className="go">Read updates →</span>
-          </a>
-        )}
-      </div>
+      {can('catalogue.read') && <PalmSpotlight data={catalogue.data} error={catalogue.error} />}
 
-      <div className="split">
-        {prices !== null && (
-          <section className="panel main" aria-labelledby="prices-title">
-            <div className="panel-head">
-              <h2 id="prices-title">Prices in force today</h2>
-              <a href="/prices">All reference prices</a>
-            </div>
-            {prices === undefined ? <p className="muted">Loading…</p> : !prices.length ? <p className="muted">No reference prices published yet.</p> : (
-              <div className="stat-grid">
-                {prices.map((s) => <PriceStat key={s.entityId} s={s} />)}
-              </div>
+      <div className="split support">
+        <section className="main" aria-labelledby="more-title">
+          <h2 id="more-title" className="section-title">More you can do</h2>
+          <div className="tool-grid">
+            {can('calc.run') && (
+              <Tool href="/calculator" tone="levy" title="Calculate a shipment" d="Products and tonnes in, total in USD and Rupiah out."
+                icon="M6 2h12a2 2 0 012 2v16a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2zM8 6h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 19h8" />
             )}
-          </section>
-        )}
+            {can('catalogue.read') && (
+              <>
+                <Tool href="/catalogue" title="All products" d="Every product and its charges in one table, ready to export."
+                  icon="M3 3h18v18H3zM3 9h18M3 15h18M9 3v18" />
+                <Tool href="/updates" tone="violet" title="What changed" d="New regulations and this period's prices."
+                  icon="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6M9 13h6M9 17h4" />
+                <Tool href="/prices" title="Reference prices" d="CPO price and exchange rate, past and present."
+                  icon="M3 3v18h18M7 14l4-4 3 3 5-6" />
+                <Tool href="/regulations" title="Regulations" d="The PMK, Kepmendag and Permenperin behind each rate."
+                  icon="M4 19.5A2.5 2.5 0 016.5 17H20V3H6.5A2.5 2.5 0 004 5.5zM4 19.5A2.5 2.5 0 006.5 22H20v-5" />
+                <Tool href="/sources" tone="violet" title="Official PDFs" d="The documents the figures come from."
+                  icon="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6M12 18v-6M9 15l3 3 3-3" />
+              </>
+            )}
+          </div>
+        </section>
         <section className="panel side" aria-labelledby="todo-title">
-          <h2 id="todo-title" style={{ marginTop: 0, fontSize: 22, fontWeight: 800 }}>Waiting for you</h2>
+          <h2 id="todo-title" style={{ marginTop: 0, fontSize: 20, fontWeight: 800 }}>Waiting for you</h2>
           {todos.map((t) => (
             <a key={t.label} className={`todo${t.n ? ' attention' : ''}`} href={t.href}>
               <span className="n">{t.n ?? '…'}</span>
@@ -252,6 +238,16 @@ function Home({ me }: { me: Me }) {
       <h2 className="section-title">New here? Two words to know</h2>
       <Glossary />
     </Page>
+  );
+}
+
+/** A supporting task on Home: smaller than the product check above it. */
+function Tool({ href, title, d, icon, tone }: { href: string; title: string; d: string; icon: string; tone?: 'levy' | 'violet' }) {
+  return (
+    <a className={tone ? `tool ${tone}` : 'tool'} href={href}>
+      <span className="ico"><Icon d={icon} size={20} /></span>
+      <span><strong>{title}</strong><span className="d">{d}</span></span>
+    </a>
   );
 }
 
