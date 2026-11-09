@@ -11,7 +11,7 @@ Browser ──► FE server 172.28.80.50:3160   ecr-web-prod (nginx: web app, /a
             BE server 172.28.80.51:4160   ecr-api-prod (NestJS API, scheduled jobs)
                       │
                       ├──► ApsaraDB RDS (prod)  pgm-d9jn3khh0b3907w4.pgsql.ap-southeast-5.rds.aliyuncs.com:5432
-                      ├──► Synology NAS         //172.30.1.94/APPs/prod/ECR  (mounted at /mnt/synology-ecr)
+                      ├──► Synology NAS         //172.30.1.94/APPs/ECR  (mounted at /mnt/synology/ECR)
                       ├──► production DWS Hub   (OIDC token and JWKS)
                       ├──► corporate SMTP relay (notifications)
                       └──► peraturan.bpk.go.id, jdih.kemenkeu.go.id, jdih.kemendag.go.id, fiskal.kemenkeu.go.id (source watch)
@@ -61,11 +61,11 @@ plus the Hub registration and `PUBLIC_BASE_URL` (web app).
 |---|---|---|
 | RDS account `ecr_app`, database `ecr`, high-privilege account for the extensions, whitelist for 172.28.80.51 | DBA / cloud admin | §3 |
 | ECR registered in the **production** DWS Hub: client id, issuer, dashboard URL, SDK key | Hub administrator | §4 |
-| NAS folder `APPs → prod → ECR` and its mount on the BE server | IT infrastructure | §6 |
+| NAS folder `APPs → ECR` and its mount on the BE server | IT infrastructure | §6 |
 | SMTP relay (host, port, account if any, sender address) | IT / mail team | §7 |
 | Firewall rules (table below) | Network team | §2 |
 | Read-only GitHub deploy key per server | Repository admin | §5 |
-| A release tag, e.g. `v1.0.0`, of a commit that passed staging | Release owner | §5, §12 |
+| A release tag, e.g. `v1.0.1`, of a commit that passed staging | Release owner | §5, §12 |
 
 **Decisions to make before go-live**
 
@@ -174,7 +174,7 @@ EOF
 ```bash
 sudo git clone git@github-exportcharges:dwsitproject-hub/Export-Charges.git /opt/export-charges
 cd /opt/export-charges
-sudo git checkout v1.0.0        # the release tag that passed staging (§12)
+sudo git checkout v1.0.1        # the release tag that passed staging (§12)
 ```
 
 Production runs a tagged release, not whatever `main` is at. The deploy scripts print the tag they deploy and refuse to
@@ -183,36 +183,63 @@ deploy code with local edits.
 ## 6. ECR's folder on the Synology NAS (once, BE server)
 
 Every file ECR stores — the official PDFs, Excel imports, exports, evidence packs and access-review reports — goes to
-its own production folder on the shared NAS, File Station **`APPs → prod → ECR`**. Other systems use the same share,
-so:
+its own folder on the shared NAS. On the production NAS each application's folder sits **directly under `APPs`**
+(unlike staging's `APPs/dev/…`), and the BE server mounts each one under `/mnt/synology/<app>`:
 
-- Only ECR's folder is mounted for ECR and bound into the container (at `/mnt/synology/prod/ECR`).
+```
+//172.30.1.94/APPs/PM                     →  /mnt/synology/PM
+//172.30.1.94/APPs/EXIM/Import            →  /mnt/synology/EXIM/Import
+//172.30.1.94/APPs/SUSTAINABILITY-PORTAL  →  /mnt/synology/SUSTAINABILITY-PORTAL
+//172.30.1.94/APPs/ECR                    →  /mnt/synology/ECR        ← ECR (new)
+```
+
+ECR's folder is File Station **`APPs → ECR`**. Other systems use the same share, so:
+
+- Only ECR's folder is mounted for ECR and bound into the container; the rest of the share is not visible to it.
+- ECR never uses `/mnt/synology-apps` (the whole share, read-write).
 - Neither Docker nor ECR creates folders or mounts, or changes owners or permissions.
-- The deploy script stops unless `STORAGE_HOST_PROJECT_DIR` is a network mount of exactly `APPs/prod/ECR` (staging's
-  `APPs/dev/ECR` and other applications' folders are refused), read-write, and writable by uid 1000 (the API's user).
+- The deploy script stops unless `STORAGE_HOST_PROJECT_DIR` is a network mount of exactly `APPs/ECR` — other
+  applications' folders and staging's `APPs/dev/ECR` are refused — mounted read-write and writable by uid 1000 (the
+  API's user).
 
 **By IT, or with their agreement:**
 
-1. File Station: create `APPs → prod → ECR`.
-2. On the BE server, see how the other applications are mounted, to reuse the same credentials file:
+1. File Station: create the folder `APPs → ECR` (the `app-prj` account that mounts the other folders must be able to
+   read and write it).
+2. On the BE server, see how the other applications' folders are mounted. They are not in `/etc/fstab` (only the whole
+   share is), so they come from systemd mount units or a script:
    ```bash
-   grep cifs /etc/fstab
-   findmnt -t cifs
+   systemctl list-units --type=mount --all | grep -i synology
    ```
-3. Back up `/etc/fstab`, then add ECR's line — use the credentials file from step 2 in place of `<credentials file>`
-   (uid/gid 1000 because the API runs as uid 1000):
+   If `mnt-synology-PM.mount` and similar are listed, IT may prefer the same for ECR: a copy of that unit named
+   `mnt-synology-ECR.mount`, with `What=//172.30.1.94/APPs/ECR`, `Where=/mnt/synology/ECR` and the options below. Otherwise
+   use `/etc/fstab` as in steps 3–5.
+3. Create the mount point and make it **immutable while nothing is mounted on it**. If the NAS is ever not mounted,
+   nothing can then write to the server's own disk in its place, and ECR refuses to start instead of storing files
+   locally (mounting over it still works):
+   ```bash
+   sudo mkdir -p /mnt/synology/ECR
+   ```
+   ```bash
+   sudo chattr +i /mnt/synology/ECR
+   ```
+4. Back up `/etc/fstab`, then add ECR's line. It uses the same credentials file as the share's existing line
+   (`/etc/smb.creds`), and uid/gid 1000 because the API runs as uid 1000. It deliberately has no `nofail`, so a missing
+   NAS shows up as a failed mount, not as an empty folder:
    ```bash
    sudo cp /etc/fstab /etc/fstab.bak.$(date +%F)
    ```
    ```bash
-   grep -q ' /mnt/synology-ecr ' /etc/fstab || echo '//172.30.1.94/APPs/prod/ECR /mnt/synology-ecr cifs rw,credentials=<credentials file>,uid=1000,gid=1000,forceuid,forcegid,dir_mode=0770,file_mode=0660,vers=3.0,iocharset=utf8,serverino,mapposix,soft,_netdev 0 0' | sudo tee -a /etc/fstab
+   grep -q ' /mnt/synology/ECR ' /etc/fstab || echo '//172.30.1.94/APPs/ECR /mnt/synology/ECR cifs rw,credentials=/etc/smb.creds,uid=1000,gid=1000,forceuid,forcegid,dir_mode=0770,file_mode=0660,vers=3.0,iocharset=utf8,soft,nounix,noserverino,_netdev 0 0' | sudo tee -a /etc/fstab
    ```
-4. Mount and check:
+5. Mount and check:
    ```bash
-   sudo mkdir -p /mnt/synology-ecr
-   sudo systemctl daemon-reload && sudo mount /mnt/synology-ecr
-   findmnt /mnt/synology-ecr      # SOURCE //172.30.1.94/APPs/prod/ECR, FSTYPE cifs, options start with rw, uid=1000
+   sudo systemctl daemon-reload && sudo mount /mnt/synology/ECR
    ```
+   ```bash
+   findmnt /mnt/synology/ECR
+   ```
+   Expected: SOURCE `//172.30.1.94/APPs/ECR`, FSTYPE `cifs`, options starting with `rw` and including `uid=1000`.
    It comes back by itself after a reboot.
 
 ## 7. Backend (BE server 172.28.80.51)
@@ -245,10 +272,10 @@ sudo bash backend/deploy/deploy-prod.sh
 ```
 
 The script, in order: checks the settings; checks the port; checks the NAS folder (prints
-`Storage: /mnt/synology-ecr = //172.30.1.94/APPs/prod/ECR (cifs)`); builds the images; tests that uid 1000 can write
+`Storage: /mnt/synology/ECR = //172.30.1.94/APPs/ECR (cifs)`); builds the images; tests that uid 1000 can write
 in ECR's folder; runs the migrations (`ecr-migrate-prod`, ending `Database is up to date.` or the list of applied
 migrations); starts `ecr-api-prod`; and waits until `http://172.28.80.51:4160/api/ready` answers. It ends with
-`ECR prod API ready on http://172.28.80.51:4160 (v1.0.0).`
+`ECR prod API ready on http://172.28.80.51:4160 (v1.0.1).`
 
 ## 8. Frontend (FE server 172.28.80.50)
 
@@ -261,7 +288,7 @@ sudo bash frontend/deploy/deploy-prod.sh
 
 The script checks the API answers from this server (`http://172.28.80.51:4160/api/health`), builds the web app with
 the Hub SDK and the release commit, starts `ecr-web-prod` on port 3160 and checks `/` and `/api/health` through the
-proxy. It ends with `ECR prod web app ready on port 3160 (v1.0.0), /api proxied to http://172.28.80.51:4160.`
+proxy. It ends with `ECR prod web app ready on port 3160 (v1.0.1), /api proxied to http://172.28.80.51:4160.`
 
 ## 9. First sign-in, Super Admins and the first data load
 
@@ -284,7 +311,7 @@ The order matters: the data load runs under an existing ECR account.
    ```
    It downloads the six official PDFs (Permenperin 32/2024, PMK 68/2025, PMK 69/2025, PMK 9/2026, Kepmendag
    2064/2026, KMK 53/MK/EF.2/2026), refuses any whose SHA-256 differs from the checked copy, stores them in
-   `APPs → prod → ECR → sources`, and publishes data version 1: the PALM commodity, groups I–V, 4 regulations,
+   `APPs → ECR → sources`, and publishes data version 1: the PALM commodity, groups I–V, 4 regulations,
    122 products, the BK and PE schedules (26 + 34 lines), the CPO bands, the November 2026 CPO reference price and the
    4–10 November 2026 KMK rate. It is audited as `CHANGESET_PUBLISHED_DIRECT` with the reason. Without internet on the
    server: `sudo docker cp <folder with the six PDFs> ecr-api-prod:/tmp/pdfs` and add `--files /tmp/pdfs`.
@@ -301,7 +328,7 @@ The order matters: the data load runs under an existing ECR account.
 | 2 | Click the ECR tile in the production Hub | Signed in on Home, no "Try again" |
 | 3 | Home | *Check a product*, today's CPO price and KMK rate, the 122 palm oil products with duty, levy and total |
 | 4 | Check *Crude Palm Oil (CPO)* | Duty, levy, total and the regulation lines behind them |
-| 5 | *Official PDFs* (Sources) → open one | The PDF opens; File Station shows it under `APPs → prod → ECR → sources` |
+| 5 | *Official PDFs* (Sources) → open one | The PDF opens; File Station shows it under `APPs → ECR → sources` |
 | 6 | Calculator: CPO, 1 tonne, save, create evidence pack | Saved; evidence PDF downloads and verifies |
 | 7 | As Super Admin: *Jobs* → `source-watch` → *Run now* | OK (otherwise the BE server cannot reach the official sites) |
 | 8 | *Notifications*: follow a product, have a change approved | Email arrives (or appears in the API log with `MAIL_TRANSPORT=log`) |
@@ -353,7 +380,7 @@ backup taken before the release. To return data to an earlier state, use ECR's o
 | What | Where | How |
 |---|---|---|
 | Database | RDS | Automatic backups and log backup (§3). Restore to a new instance, then point `DB_HOST` at it and redeploy the backend |
-| Stored files | NAS `APPs/prod/ECR` | Covered by the NAS's snapshot / Hyper Backup policy — ask IT to include `APPs/prod/ECR` |
+| Stored files | NAS `APPs/ECR` | Covered by the NAS's snapshot / Hyper Backup policy — ask IT to include `APPs/ECR` |
 | Settings and keys | `backend/.env.prod`, `frontend/.env.prod` | Copies in the password vault; `ECR_ENCRYPTION_KEY` is essential |
 | Code | GitHub, release tags | Re-clone and check out the tag (§5) |
 
@@ -379,8 +406,10 @@ Everything in [DEPLOY-STAGING.md](DEPLOY-STAGING.md) §9 applies, with `ecr-api-
 | Symptom | Cause / fix |
 |---|---|
 | `Missing backend/.env.prod` | Copy `backend/.env.prod.example` to `backend/.env.prod` (§7). |
-| `STORAGE_DEPLOYMENT=dev in backend/.env.prod, but prod uses prod` | Production must store files in `APPs/prod/ECR`: set `STORAGE_DEPLOYMENT=prod`. |
-| `… is NAS folder //172.30.1.94/APPs/dev/ECR, not APPs/prod/ECR` | The mount points at staging's folder; mount `APPs/prod/ECR` (§6). |
+| `STORAGE_DEPLOYMENT=dev in backend/.env.prod, but prod uses prod` | Set `STORAGE_DEPLOYMENT=prod` in `backend/.env.prod`. |
+| `… is NAS folder //172.30.1.94/APPs/…, not APPs/ECR` | `STORAGE_HOST_PROJECT_DIR` points at another folder (another application's, staging's, or the whole share): use `/mnt/synology/ECR` (§6). |
+| `/mnt/synology/ECR is not on the Synology share (file system: ext4)` | The NAS folder is not mounted: `sudo mount /mnt/synology/ECR`, then `findmnt /mnt/synology/ECR` (§6). |
+| API log: `Cannot write in the storage folder …` after a reboot | Same cause: the mount did not come back; the immutable mount point (§6 step 3) stopped ECR from writing to the local disk. Mount it and restart: `sudo docker restart ecr-api-prod`. |
 | `The code in /opt/export-charges has local changes` | Someone edited files on the server. `sudo git status`, then `sudo git checkout -- <file>` (or move the change to GitHub) and deploy again. |
 | `Cannot reach the API at http://172.28.80.51:4160` | Backend not deployed yet, or 172.28.80.50 → 172.28.80.51:4160 is blocked. |
 | `ETIMEDOUT` in the migration log | 172.28.80.51 is not on the production RDS whitelist. |

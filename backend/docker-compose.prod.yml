@@ -26,7 +26,7 @@ services:
       STORAGE_DEPLOYMENT: ${STORAGE_DEPLOYMENT:-prod}
       STORAGE_PROJECT_SLUG: ${STORAGE_PROJECT_SLUG:-ECR}
     volumes:
-      # Only ECR's folder is bound: the server mounts NAS folder APPs/{deployment}/{slug} at STORAGE_HOST_PROJECT_DIR
+      # Only ECR's folder is bound: the server mounts NAS folder APPs/ECR at STORAGE_HOST_PROJECT_DIR (/mnt/synology/ECR)
       # (one mount per application), so the container never sees other systems' folders. It must already exist:
       # Docker is told not to create it, and the API does not create it either.
       - type: bind

@@ -38,10 +38,15 @@ PORT=$(setting ECR_API_PORT); PORT=${PORT:-4160}
 PROJECT_DIR=$(setting STORAGE_HOST_PROJECT_DIR)
 DEPLOYMENT=$(setting STORAGE_DEPLOYMENT); DEPLOYMENT=${DEPLOYMENT:-dev}
 SLUG=$(setting STORAGE_PROJECT_SLUG); SLUG=${SLUG:-ECR}
-[[ -n $PROJECT_DIR ]] || { echo "Set STORAGE_HOST_PROJECT_DIR in $ENV_FILE (where NAS folder APPs/$EXPECTED_DEPLOYMENT/$SLUG is mounted, e.g. /mnt/synology-ecr)." >&2; exit 1; }
-# Production files go to APPs/prod/…, staging files to APPs/dev/…: never the other one's folder.
+# ECR's folder on the shared NAS. The two NAS layouts differ: staging keeps applications under APPs/dev/<app>,
+# production directly under APPs/<app> (like APPs/PM). Never the other environment's folder.
+case "$TARGET" in
+  staging) NAS_FOLDER="APPs/dev/$SLUG" ;;
+  prod)    NAS_FOLDER="APPs/$SLUG" ;;
+esac
+[[ -n $PROJECT_DIR ]] || { echo "Set STORAGE_HOST_PROJECT_DIR in $ENV_FILE (where NAS folder $NAS_FOLDER is mounted)." >&2; exit 1; }
 if [[ $DEPLOYMENT != "$EXPECTED_DEPLOYMENT" ]]; then
-  echo "STORAGE_DEPLOYMENT=$DEPLOYMENT in $ENV_FILE, but $TARGET uses $EXPECTED_DEPLOYMENT (NAS folder APPs/$EXPECTED_DEPLOYMENT/$SLUG)." >&2
+  echo "STORAGE_DEPLOYMENT=$DEPLOYMENT in $ENV_FILE, but $TARGET uses $EXPECTED_DEPLOYMENT." >&2
   exit 1
 fi
 
@@ -72,7 +77,7 @@ fi
 # Files live in ECR's own folder on the shared Synology NAS. Check only — never create or change anything there:
 # other systems use the same share.
 if [[ ! -d "$PROJECT_DIR" ]]; then
-  echo "$PROJECT_DIR does not exist. NAS folder APPs/$DEPLOYMENT/$SLUG must be created and mounted there (docs/DEPLOY-${TARGET^^}.md);" >&2
+  echo "$PROJECT_DIR does not exist. NAS folder $NAS_FOLDER must be created and mounted there (docs/DEPLOY-${TARGET^^}.md);" >&2
   echo "ECR does not create folders or mounts." >&2
   exit 1
 fi
@@ -84,11 +89,12 @@ case "$FSTYPE" in
 esac
 # The mount must be ECR's own NAS folder (not another application's) and writable.
 MNT_TARGET=$(findmnt -n -o TARGET --target "$PROJECT_DIR")
-MNT_SOURCE=$(findmnt -n -o SOURCE --target "$PROJECT_DIR")
+# findmnt may print a sub-folder mount as //host/share[/folder]: read it as //host/share/folder.
+MNT_SOURCE=$(findmnt -n -o SOURCE --target "$PROJECT_DIR" | tr -d '[]')
 MNT_OPTIONS=$(findmnt -n -o OPTIONS --target "$PROJECT_DIR")
 NAS_PATH="${MNT_SOURCE%/}${PROJECT_DIR#"$MNT_TARGET"}"
-if [[ ${NAS_PATH,,} != */apps/${DEPLOYMENT,,}/${SLUG,,} ]]; then
-  echo "$PROJECT_DIR is NAS folder $NAS_PATH, not APPs/$DEPLOYMENT/$SLUG. Check STORAGE_HOST_PROJECT_DIR — it must not be another application's folder." >&2
+if ! [[ $NAS_PATH =~ ^//[^/]+/(.+)$ ]] || [[ ${BASH_REMATCH[1],,} != "${NAS_FOLDER,,}" ]]; then
+  echo "$PROJECT_DIR is NAS folder $NAS_PATH, not $NAS_FOLDER. Check STORAGE_HOST_PROJECT_DIR — it must not be another application's folder." >&2
   exit 1
 fi
 if [[ ,$MNT_OPTIONS, == *,ro,* ]]; then
