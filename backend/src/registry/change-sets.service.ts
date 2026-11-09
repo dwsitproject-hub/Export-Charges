@@ -703,7 +703,7 @@ export class ChangeSetsService implements OnModuleInit, OnModuleDestroy {
         after: { versionNo: v, items: items.length },
       });
       // Same transaction: the Maker's notice and the subscribers' notices exist exactly when the version does.
-      await this.notifications.published(client, set, v, items);
+      await this.notifications.published(client, set, v, items, publishedBy);
       return v;
     } catch (err) {
       Object.assign(err as object, { changeSetId: set.id });

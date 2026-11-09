@@ -37,6 +37,8 @@ import { JobsController } from './jobs/jobs.controller';
 import { JobsService } from './jobs/jobs.service';
 import { SourceWatchController } from './source-watch/source-watch.controller';
 import { SourceWatchService } from './source-watch/source-watch.service';
+import { AutoUpdateService } from './auto-update/auto-update.service';
+import { RegulationDraftService } from './auto-update/regulation-drafts';
 import { ExportsService } from './exports/exports.service';
 import { ImportsController } from './imports/imports.controller';
 import { ImportsService } from './imports/imports.service';
@@ -97,6 +99,8 @@ export class AppModule {
         NotificationsService,
         JobsService,
         SourceWatchService,
+        AutoUpdateService,
+        RegulationDraftService,
         { provide: MAIL_SENDER, useValue: mailSender(config) },
         { provide: OBJECT_STORE, useValue: new DirectoryObjectStore(config.storageDir, { createRoot: config.storageKind === 'local' }) },
         {

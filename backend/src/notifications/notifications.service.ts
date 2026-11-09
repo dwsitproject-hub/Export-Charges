@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import type { Actor } from '../auth/actor';
+import { AUTO_UPDATE_USER_ID } from '../auto-update/system-account';
 import { ApiError } from '../common/api-error';
 import { safeEqual } from '../common/crypto';
 import { asObject, UUID_RE, wibToday } from '../common/fields';
@@ -96,7 +97,9 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
       title: rollback ? `Rollback waiting for review: ${set.title}` : `Change set waiting for review: ${set.title}`,
       body: rollback
         ? 'A Checker asked to roll back a published version. Another Checker must review and approve it.'
-        : 'A Maker submitted a change set. Start the review in ECR.',
+        : set.created_by === AUTO_UPDATE_USER_ID
+          ? 'ECR drafted this change by itself from the official source. Compare it with the PDF, then approve or reject it in ECR.'
+          : 'A Maker submitted a change set. Start the review in ECR.',
       link: `/change-sets/${set.id}`,
       changeSetId: set.id,
       dedupeKey: `submitted:${set.id}:${Date.now()}`,
@@ -129,12 +132,27 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
    * A version was published: its Maker is told, and so is everyone following a commodity, group or product the
    * version affects — one notice per person whatever the number of matching subscriptions (US-48-P1, US-48-N1 AC1).
    */
-  async published(q: Queryable, set: SetInfo, versionNo: number, items: PublishedItem[]) {
+  async published(q: Queryable, set: SetInfo, versionNo: number, items: PublishedItem[], publishedBy: string | null = null) {
     await this.toMaker(q, set, 'CHANGESET_PUBLISHED', `Published as version ${versionNo}: ${set.title}`,
       `Your change set is now data version ${versionNo}.`, versionNo);
+    // A change ECR drafted by itself and a Checker approved: everyone hears of it (after the followers' own notices).
+    const announceToAll = set.created_by === AUTO_UPDATE_USER_ID && publishedBy !== AUTO_UPDATE_USER_ID;
 
     const scopes = await this.affectedScopes(q, versionNo, items);
-    if (!scopes.size) return;
+    if (scopes.size) await this.notifyFollowers(q, set, versionNo, scopes);
+    if (announceToAll) {
+      const checker = publishedBy ? (await q.query<{ full_name: string }>('SELECT full_name FROM ecr.app_user WHERE id = $1', [publishedBy])).rows[0]?.full_name : null;
+      await this.everyone(q, {
+        kind: 'AUTO_UPDATE',
+        title: `Updated: ${set.title.replace(/ — (automatic update|drafted by ECR for a Checker)$/, '')}`,
+        body: `ECR prepared this change from the official source${checker ? ` and ${checker} checked and approved it` : ' and a Checker approved it'}. It is published as data version ${versionNo}.`,
+        link: `/bulletins/${versionNo}`, versionNo, changeSetId: set.id, dedupeKey: `published:${versionNo}`,
+      });
+    }
+  }
+
+  /** Everyone following a commodity, group or product the version affects: one notice per person. */
+  private async notifyFollowers(q: Queryable, set: SetInfo, versionNo: number, scopes: Awaited<ReturnType<NotificationsService['affectedScopes']>>) {
     const { rows } = await q.query<{ id: string; user_id: string; email: string; scope_entity_id: string }>(
       `SELECT s.id, s.user_id, u.email, s.scope_entity_id
          FROM ecr.subscription s JOIN ecr.app_user u ON u.id = s.user_id
@@ -385,6 +403,17 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
              WHERE ur.user_id = u.id AND ${ACTIVE_ROLE} AND (r.code = ANY($1::text[]) OR rp.permission_code = ANY($2::text[]))))`,
       [audience.roles ?? [], audience.permissions ?? [], audience.userIds ?? []],
     );
+    await this.deliver(q, rows, n);
+    return rows.length;
+  }
+
+  /**
+   * A notice (in ECR and by email) to every active account, e.g. an automatic update of a reference price. Use the
+   * dedupe key of the version's follower notice (`published:<version>`), so followers keep their own notice and
+   * receive no second one.
+   */
+  async everyone(q: Queryable, n: { kind: string; title: string; body: string; link: string; versionNo: number | null; changeSetId: string | null; dedupeKey: string }) {
+    const { rows } = await q.query<Recipient>(`SELECT id, email FROM ecr.app_user WHERE status = 'ACTIVE'`);
     await this.deliver(q, rows, n);
     return rows.length;
   }

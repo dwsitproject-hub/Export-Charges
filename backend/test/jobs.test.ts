@@ -76,17 +76,17 @@ describe('scheduled jobs (Technical Design §4.2.7)', () => {
 
   it('runs each due job once, by its WIB time or interval', async () => {
     const now = new Date();
-    expect((await jobs.tick(now)).sort()).toEqual(['access-review', 'audit-chain-verify', 'dormancy', 'dq-nightly', 'jwks-refresh', 'ref-gap-check', 'session-sweep', 'source-watch']);
+    expect((await jobs.tick(now)).sort()).toEqual(['access-review', 'audit-chain-verify', 'auto-update', 'dormancy', 'dq-nightly', 'jwks-refresh', 'ref-gap-check', 'session-sweep', 'source-watch']);
     expect(await jobs.tick(now)).toEqual([]);
     expect(await jobs.tick(new Date(now.getTime() + 16 * 60_000))).toEqual(['session-sweep']);
     // 08:00 WIB the next day: every daily job is due again, and more than 6 h have passed for jwks-refresh.
     const tomorrow = new Date(`${addDays(today, 1)}T08:00:00+07:00`);
-    expect((await jobs.tick(tomorrow)).sort()).toEqual(['access-review', 'audit-chain-verify', 'dormancy', 'dq-nightly', 'jwks-refresh', 'ref-gap-check', 'session-sweep', 'source-watch']);
+    expect((await jobs.tick(tomorrow)).sort()).toEqual(['access-review', 'audit-chain-verify', 'auto-update', 'dormancy', 'dq-nightly', 'jwks-refresh', 'ref-gap-check', 'session-sweep', 'source-watch']);
 
     const list = (await auditor.agent.get('/api/jobs').expect(200)).body;
     expect(list.map((j: { name: string; schedule: string }) => `${j.name} ${j.schedule}`)).toEqual([
       'dq-nightly Daily 01:00 WIB', 'dormancy Daily 01:30 WIB', 'audit-chain-verify Daily 03:30 WIB', 'source-watch Daily 06:00 WIB', 'ref-gap-check Daily 07:00 WIB', 'access-review Daily 08:00 WIB',
-      'jwks-refresh Every 6 h', 'session-sweep Every 15 min',
+      'auto-update Every 3 h', 'jwks-refresh Every 6 h', 'session-sweep Every 15 min',
     ]);
     expect(list.find((j: { name: string }) => j.name === 'jwks-refresh').lastRun).toMatchObject({ status: 'OK', details: { keys: 1, usable: 1 } });
     await viewer.agent.get('/api/jobs').expect(403);

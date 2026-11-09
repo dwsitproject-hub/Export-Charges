@@ -194,7 +194,8 @@ export class RegistryReadService {
     const { rows } = await this.db.query(
       `SELECT v.version_no AS "versionNo", v.published_at AS "publishedAt", v.change_set_id AS "changeSetId",
               cs.title, cs.kind, cs.rollback_of_version AS "rollbackOfVersion", v.rolled_back_by_version AS "rolledBackByVersion",
-              v.bulletin, u.full_name AS "publishedByName"
+              v.bulletin, u.full_name AS "publishedByName",
+              v.published_by = '00000000-0000-0000-0000-00000000ec01'::uuid AS automatic
          FROM ecr.data_version v
          JOIN ecr.change_set cs ON cs.id = v.change_set_id
          LEFT JOIN ecr.app_user u ON u.id = v.published_by

@@ -10,6 +10,7 @@ import { DbService } from '../db/db.service';
 import { wibDateTime } from '../exports/present';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SourceWatchService } from '../source-watch/source-watch.service';
+import { AutoUpdateService } from '../auto-update/auto-update.service';
 import { CandidateState } from '../registry/candidate';
 import { ENTITY_DEFS, EntityType } from '../registry/entities';
 import { validateItems } from '../registry/validation';
@@ -65,6 +66,7 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
     private readonly oidc: OidcService,
     private readonly reviews: AccessReviewsService,
     private readonly sourceWatch: SourceWatchService,
+    private readonly autoUpdate: AutoUpdateService,
   ) {
     this.jobs = [
       { name: 'dq-nightly', description: 'Data-quality rules on all published data (FR-DQ-01, US-51-P1)', schedule: { daily: '01:00' }, run: (id) => this.dqNightly(id) },
@@ -73,6 +75,8 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
       { name: 'source-watch', description: 'Check BPK status of registered regulations and official listings for new documents (FR-SRC-03/04)', schedule: { daily: '06:00' }, run: (id) => this.sourceWatch.run(id) },
       { name: 'ref-gap-check', description: 'Warn when no reference price or KMK rate covers today (US-27-N2)', schedule: { daily: '07:00' }, run: () => this.refGapCheck() },
       { name: 'access-review', description: 'Open the quarterly access review; escalate assignments open 14 days (L2-1.9, US-12)', schedule: { daily: '08:00' }, run: (id) => this.accessReview(id) },
+      { name: 'auto-update', description: 'Publish new CPO reference prices and KMK rates that pass the checks; draft the rest and new palm duty or levy regulations for a Checker; tell every user', schedule: { everyMinutes: 180 },
+        run: (id) => (this.config.autoUpdate ? this.autoUpdate.run(id) : Promise.resolve({ skipped: 'AUTO_UPDATE=false: Makers and Checkers enter these values' })) },
       { name: 'jwks-refresh', description: 'Reload the DWS Hub discovery document and signing keys', schedule: { everyMinutes: 360 }, run: () => this.oidc.refreshKeys() },
       { name: 'session-sweep', description: 'End expired sessions; delete old sessions and sign-in states', schedule: { everyMinutes: 15 }, run: () => this.sessionSweep() },
     ];

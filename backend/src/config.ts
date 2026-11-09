@@ -55,6 +55,11 @@ export interface AppConfig {
   exportJobIntervalMs: number;
   /** How often the scheduler checks which scheduled jobs are due; 0 disables it (tests run jobs directly). */
   schedulerTickMs: number;
+  /**
+   * The auto-update job reads each new CPO reference price decree (Kepmendag) and KMK rate, checks it and publishes it
+   * without a Checker; false leaves both to Makers and Checkers (AUTO_UPDATE=false).
+   */
+  autoUpdate: boolean;
   /** Printed on calculations, exports and evidence packs; a Super Admin can change it (F-52). */
   disclaimer: string;
   /** How often each API instance reloads the settings saved on the Configuration screen; 0 disables it. */
@@ -157,6 +162,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     exportAsyncThreshold: Math.max(0, Number(env.EXPORT_ASYNC_THRESHOLD ?? 50_000)),
     exportJobIntervalMs: Number(env.EXPORT_JOB_INTERVAL_MS ?? 15_000),
     schedulerTickMs: Number(env.SCHEDULER_TICK_MS ?? 60_000),
+    autoUpdate: (env.AUTO_UPDATE ?? 'true').trim().toLowerCase() !== 'false',
     disclaimer: DEFAULT_DISCLAIMER,
     settingsRefreshMs: Number(env.SETTINGS_REFRESH_MS ?? 5_000),
   };

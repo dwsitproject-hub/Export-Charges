@@ -328,6 +328,7 @@ Admins can *Run now* with a fresh authenticator code.
 | `audit-chain-verify` | 03:30 | Recomputes the whole hash chain (US-50-N1 AC2); a break is recorded as `AUDIT_CHAIN_BROKEN`, alerts Super Admins and Auditors, and the run is FAILED |
 | `source-watch` | 06:00 | See *Source watch* below |
 | `ref-gap-check` | 07:00 | Each reference-price series used by a schedule line and each KMK series needs a value covering today (US-27-N2); missing ones alert Makers and Checkers |
+| `auto-update` | every 3 h | See *Automatic and semi-automatic updates* below |
 | `access-review` | 08:00 | Opens this quarter's access review if it has none and tells User Admins; escalates items still open 14 days after their campaign started (see *Access reviews*) |
 | `jwks-refresh` | every 6 h | Reloads the DWS Hub discovery document and checks the JWKS still has an RS256 or ES256 signing key |
 | `session-sweep` | every 15 min | Ends sessions past their idle or absolute limit, deletes expired sign-in states and sessions ended more than 30 days ago |
@@ -355,6 +356,45 @@ a fingerprint and is reported once. A page that cannot be read is listed in the 
 run fails and Super Admins are alerted. The server needs outbound HTTPS to `peraturan.bpk.go.id`, `jdih.kemenkeu.go.id`,
 `jdih.kemendag.go.id` and the publishers of stored PDFs (UAT/production: allow these on the egress proxy). The listings
 and their keywords are in `LISTINGS` in `source-watch.service.ts`.
+
+### Automatic and semi-automatic updates
+
+`backend/src/auto-update`, job `auto-update` (every 3 hours). ECR keeps itself in step with the official sources; every
+change is recorded under the system account *ECR automatic update* (deactivated, it cannot sign in — and being the
+creator of its change sets, any Checker may review them).
+
+**Automatic — the CPO reference price and the KMK rate.** The job reads JDIH Kemendag's "harga referensi" listing
+(the 3 newest agricultural decrees) and BKF's *Kurs Pajak* page, downloads each new decree and reads its PDF text
+(pdf.js): the CPO price in US$/MT and its period, or the USD rate and its week (the KMK's PDF must agree with BKF's
+page). When the value passes every check — wording found, CPO within US$ 300–3,000/MT and at most 30 % from the
+previous month, USD/IDR within Rp 5,000–50,000 and at most 5 % from the previous week, no overlap with a published
+period — ECR stores the PDF as the source, publishes the value directly (`CHANGESET_PUBLISHED_DIRECT`, with the
+decree, PDF SHA-256 and quoted text) and tells **every active user**, in ECR and by email, with a link to the bulletin.
+The same value already published is recorded as such; a period already over is skipped.
+
+**Semi-automatic — anything that needs a person.** ECR drafts the change, submits it, and the **Checkers** get
+*"Change set waiting for review … ECR drafted this change by itself from the official source"*. Nothing is published
+until a Checker approves; the approval publishes it and tells every user (*"Updated: …"*). Drafted this way:
+
+| Found | Drafted change set |
+|---|---|
+| A price or rate that fails a check (unusual change, outside the range, BKF's page and the decree disagreeing — the decree's own figures are used) | The value with its PDF; the justification says why it was not published |
+| A corrected decree (another value for a published period) | An update of that value |
+| A new regulation the source watch reports on BPK (new PMK on the listings, or one BPK says amends/revokes a regulation ECR holds) that amends or revokes a registered regulation | The regulation (BPK details, PDF, start date from its own text — e.g. "mulai berlaku setelah 7 hari terhitung sejak tanggal diundangkan" + BPK's *Tanggal Pengundangan*), its AMENDS/REVOKES relations; a revoked one set to REVOKED from that date |
+| … whose annex carries a palm **export duty** table (17 CPO price bands) or **levy** table that differs from the one in force | Also: a new schedule with every line (amounts per band, or fixed US$ / % of the CPO price, merged rate cells carried down), each linked to the products of the line it replaces (same number and HS codes); new price bands if they changed; the old schedule and lines ended the day before |
+
+The readers were checked against the real documents: PMK 68/2025 Lampiran C (17 bands, 26 lines) and PMK 9/2026
+Lampiran A (34 lines) reproduce every amount, rate, HS code and group entered by hand, and both start dates. For a PMK
+the Ministry of Finance's own copy on JDIH Kemenkeu is read first and BPK's only when JDIH has none; whichever is used,
+its own text must name the regulation, or it is refused (BPK's page for PMK 9/2026 offers PMK 8/2026's file).
+A regulation that changes nothing ECR holds is dismissed from the source watch with a note.
+
+**Left to the Makers** (*"… could not be updated / drafted automatically"*, to Makers, Checkers and Super Admins, once):
+a decree or regulation whose PDF ECR cannot read, a period overlapping a published one, and a draft that fails the
+change-set checks (left as a draft to correct). Product classifications (Permenperin) and BPK status changes without a
+named regulation stay with the source watch. A run that can read no official site fails and alerts Super Admins.
+`ecr.auto_update_source` records each decree and regulation handled. `AUTO_UPDATE=false` turns the job off. It reads
+`jdih.kemendag.go.id`, `fiskal.kemenkeu.go.id`, `peraturan.bpk.go.id` and `jdih.kemenkeu.go.id` over HTTPS.
 
 ### Logout
 
@@ -502,6 +542,16 @@ OIDC contract:
 - `test/source-watch.test.ts` — BPK page and label parsing, an amendment not registered in ECR, listing baselines,
   new documents, a new JDIH file and a changed official PDF reported once, closing items (reason to dismiss, Makers
   only, audited), and a failed run when no source can be read; the official sites are replaced by test pages.
+- `test/auto-update.test.ts` — reading the real Kepmendag 2064/2026 and KMK 53/MK/EF.2/2026 PDFs and BKF's page;
+  publishing both under the system account and telling every user; nothing on later runs; a too-large change and a KMK
+  whose PDF disagrees with BKF's page drafted for a Checker, whose approval publishes it and tells everyone; an
+  unreadable decree left to the Makers (alerted once); a period already over skipped; the source watch item closed; a
+  failed run when no site can be read. The official sites are replaced by test pages.
+- `test/auto-update-regulations.test.ts` — the real PMK 68/2025 and PMK 9/2026 tables read exactly as entered by hand;
+  starting from the official palm data, a new PMK changing the duty table drafted (regulation, schedule, 26 lines
+  linked to their products, old ones ended) and, once a Checker approves, CPO paying the new duty from its start date;
+  a levy change drafted; BPK's wrong PDF replaced by JDIH Kemenkeu's; an unrelated regulation dismissed; an unreadable
+  one left to the Makers once.
 - `test/access-reviews.test.ts` — one campaign per quarter covering every live assignment, Super Admin review of
   administrators, SoD-3 and step-up, revoke ending the user's sessions, a role removed elsewhere, 14-day escalation,
   and completion with a downloadable signed report whose tampering the check detects.

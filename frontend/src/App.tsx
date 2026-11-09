@@ -134,7 +134,7 @@ function route(path: string, me: Me): ReactNode {
   return <Home me={me} />;
 }
 
-interface DataVersion { versionNo: number; publishedAt: string; title: string; kind: string; publishedByName: string | null }
+interface DataVersion { versionNo: number; publishedAt: string; title: string; kind: string; publishedByName: string | null; automatic?: boolean }
 interface ReviewCampaign { id: string; periodLabel: string; status: string; waitingForYou: number }
 interface DqSummary { run: { at: string; errors: number; warnings: number } | null }
 
@@ -314,7 +314,7 @@ export function VersionFeed({ versions }: { versions: DataVersion[] }) {
       {versions.map((v) => (
         <li key={v.versionNo}>
           <a href={`/bulletins/${v.versionNo}`}>
-            <span className={`tag${v.kind === 'ROLLBACK' ? ' warn' : ' violet'}`}>{v.kind === 'ROLLBACK' ? 'Undone' : 'Update'}</span>
+            <span className={`tag${v.kind === 'ROLLBACK' ? ' warn' : v.automatic ? '' : ' violet'}`}>{v.kind === 'ROLLBACK' ? 'Undone' : v.automatic ? 'Automatic' : 'Update'}</span>
             <span className="body"><strong>{v.title}</strong><span>Version {v.versionNo}{v.publishedByName ? ` · published by ${v.publishedByName}` : ''}</span></span>
             <span className="when">{dateTime(v.publishedAt)}</span>
           </a>
