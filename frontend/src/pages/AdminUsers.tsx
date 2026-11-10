@@ -68,7 +68,7 @@ export function AdminUsers({ me }: { me: Me }) {
     <Page
       title="Users"
       actions={<button type="button" className="primary" onClick={() => { setAdding(true); setSelected(null); setNotice(null); }}>Add user</button>}
-      intro="Add people before they first sign in, give them the right role, and keep the list up to date. Everyone signs in with DWS Hub; someone who signs in without being added starts as a Viewer."
+      intro={`Add people before they first sign in, give them the right role, and keep the list up to date. Everyone signs in with DWS Hub; someone who signs in without being added starts as a Viewer. Every change needs a reason${me.totp.enabled ? ' and an authenticator code' : ''}.`}
     >
       {notice && <p className="callout ok" role="status">{notice}</p>}
       {adding && (
@@ -86,7 +86,7 @@ export function AdminUsers({ me }: { me: Me }) {
       {users && (
         <TableWrap><table className="users-table">
           <thead>
-            <tr><th>Name</th><th>Status</th><th>Roles</th><th>Authenticator</th><th>Last sign-in</th><th /></tr>
+            <tr><th>Name</th><th>Status</th><th>Roles</th>{me.totp.enabled && <th>Authenticator</th>}<th>Last sign-in</th><th /></tr>
           </thead>
           <tbody>
             {users.map((u) => (
@@ -94,12 +94,12 @@ export function AdminUsers({ me }: { me: Me }) {
                 <td><strong>{u.fullName}</strong><br /><span className="muted">{u.email}</span>{u.department && <><br /><span className="muted small">{u.department}</span></>}</td>
                 <td><StatusTag status={u.status} /></td>
                 <td>{u.roles.map(roleName).join(', ') || '—'}</td>
-                <td>{u.totpEnrolled ? 'Set up' : '—'}</td>
+                {me.totp.enabled && <td>{u.totpEnrolled ? 'Set up' : '—'}</td>}
                 <td>{u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : '—'}</td>
                 <td>{u.id === me.user.id ? <em>you</em> : <button type="button" onClick={() => { setSelected(u); setAdding(false); setNotice(null); }}>Manage</button>}</td>
               </tr>
             ))}
-            {!users.length && <tr><td colSpan={6} className="muted">No user matches.</td></tr>}
+            {!users.length && <tr><td colSpan={me.totp.enabled ? 6 : 5} className="muted">No user matches.</td></tr>}
           </tbody>
         </table></TableWrap>
       )}
@@ -108,6 +108,7 @@ export function AdminUsers({ me }: { me: Me }) {
           key={selected.id}
           user={selected}
           superAdmin={superAdmin}
+          totpEnabled={me.totp.enabled}
           onChanged={() => load()}
           onDeleted={async (name, result) => {
             setSelected(null);
@@ -200,8 +201,8 @@ function AddPanel({ superAdmin, onAdded, onClose }: { superAdmin: boolean; onAdd
   );
 }
 
-function ManagePanel({ user, superAdmin, onChanged, onDeleted, onClose }: {
-  user: UserSummary; superAdmin: boolean; onChanged: () => Promise<void>; onDeleted: (name: string, result: 'REMOVED' | 'ANONYMISED') => Promise<void>; onClose: () => void;
+function ManagePanel({ user, superAdmin, totpEnabled, onChanged, onDeleted, onClose }: {
+  user: UserSummary; superAdmin: boolean; totpEnabled: boolean; onChanged: () => Promise<void>; onDeleted: (name: string, result: 'REMOVED' | 'ANONYMISED') => Promise<void>; onClose: () => void;
 }) {
   const [details, setDetails] = useState({ fullName: user.fullName, department: user.department ?? '', email: user.email });
   const [roles, setRoles] = useState<string[]>(user.roles);
@@ -283,7 +284,7 @@ function ManagePanel({ user, superAdmin, onChanged, onDeleted, onClose }: {
           {user.status === 'INVITED' ? null : user.status === 'ACTIVE'
             ? <button type="button" disabled={busy} onClick={() => act('Account deactivated', 'deactivate')}>Deactivate</button>
             : <button type="button" disabled={busy} onClick={() => act('Account reactivated', 'reactivate')}>Reactivate</button>}
-          {user.totpEnrolled && <button type="button" disabled={busy} onClick={() => act('Authenticator reset', 'reset-totp')}>Reset authenticator</button>}
+          {totpEnabled && user.totpEnrolled && <button type="button" disabled={busy} onClick={() => act('Authenticator reset', 'reset-totp')}>Reset authenticator</button>}
           {user.liveSessions > 0 && <button type="button" disabled={busy} onClick={() => act('Sessions ended', 'revoke-sessions')}>End sessions ({user.liveSessions})</button>}
           {!confirmDelete && <button type="button" className="danger" disabled={busy} onClick={() => setConfirmDelete(true)}>Delete user…</button>}
         </div>

@@ -27,7 +27,12 @@ export interface AppConfig {
   /** Roles given to an account created just-in-time on first DWS Hub sign-in (may be empty). */
   jitDefaultRoles: string[];
   /** How long a TOTP step-up stays valid for sensitive actions (Technical Design §4.1.6). */
-  /** Roles that never need the ECR authenticator (enrolment or step-up), even though privileged. */
+  /**
+   * Whether ECR asks for its own authenticator app (TOTP) at all. Off by default: DWS Hub sign-in is enough and no
+   * one is asked to enrol or to confirm codes. TOTP_REQUIRED=true turns it on for privileged roles.
+   */
+  totpEnabled: boolean;
+  /** Roles that never need the ECR authenticator (enrolment or step-up), even though privileged (when it is on). */
   totpExemptRoles: string[];
   stepUpWindowMinutes: number;
   totpIssuer: string;
@@ -132,6 +137,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       .map((s) => s.trim().toUpperCase())
       .filter(Boolean),
     stepUpWindowMinutes: 5,
+    totpEnabled: (env.TOTP_REQUIRED ?? 'false').trim().toLowerCase() === 'true',
     // Default: Super Admins sign in through DWS Hub only. Set TOTP_EXEMPT_ROLES= (empty) to require it of every privileged role.
     totpExemptRoles: (env.TOTP_EXEMPT_ROLES ?? 'SUPER_ADMIN')
       .split(',')

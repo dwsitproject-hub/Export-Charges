@@ -576,7 +576,7 @@ a.palm-row:hover strong { color: var(--accent-strong); }
 .tour { position: fixed; inset: 0; z-index: 1000; }
 .tour-shade { position: fixed; inset: 0; background: rgba(20, 16, 12, 0.6); pointer-events: none; }
 .tour-shade.hole { inset: auto; background: transparent; border-radius: 14px; box-shadow: 0 0 0 9999px rgba(20, 16, 12, 0.6); outline: 3px solid var(--cta); outline-offset: 0; }
-.tour-card { position: fixed; z-index: 1; background: var(--panel); color: var(--ink); border-radius: 18px; padding: 20px 22px 18px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3); opacity: 0; transition: opacity 0.15s; outline: none; }
+.tour-card { position: fixed; z-index: 1; max-width: calc(100vw - 32px); box-sizing: border-box; background: var(--panel); color: var(--ink); border-radius: 18px; padding: 20px 22px 18px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3); opacity: 0; transition: opacity 0.15s; outline: none; }
 @media (prefers-reduced-motion: reduce) { .tour-card { transition: none; } }
 .tour-card.ready { opacity: 1; }
 .tour-card .tour-count { margin: 0 0 4px; font-size: 12px; font-weight: 750; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
@@ -604,7 +604,7 @@ a.palm-row:hover strong { color: var(--accent-strong); }
 .user-panel { margin: 0 0 24px; }
 .user-panel h3 { margin: 0 0 10px; font-size: 16px; }
 .user-section { border-top: 1px solid var(--line); padding-top: 16px; margin-top: 16px; }
-.user-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.user-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 12px; align-items: end; }
 .user-panel .reason { margin-bottom: 4px; }
 .role-picker { border: 0; padding: 0; margin: 0 0 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
 .role-picker legend { font-weight: 650; margin-bottom: 6px; padding: 0; }

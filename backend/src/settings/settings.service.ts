@@ -130,8 +130,9 @@ export class SettingsService implements OnModuleInit, OnModuleDestroy {
       fixed: [
         {
           label: 'Authenticator for privileged roles',
-          value: this.config.totpExemptRoles.length ? `Required, except ${this.config.totpExemptRoles.join(', ')}` : 'Always required',
-          note: 'TOTP_EXEMPT_ROLES',
+          value: !this.config.totpEnabled ? 'Not used: DWS Hub sign-in only'
+            : this.config.totpExemptRoles.length ? `Required, except ${this.config.totpExemptRoles.join(', ')}` : 'Always required',
+          note: 'TOTP_REQUIRED, TOTP_EXEMPT_ROLES',
         },
         { label: 'DWS Hub issuer', value: this.config.hubIssuer, note: 'HUB_ISSUER' },
         { label: 'DWS Hub client id', value: this.config.oidcClientId, note: 'OIDC_CLIENT_ID' },

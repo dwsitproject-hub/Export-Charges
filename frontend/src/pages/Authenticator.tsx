@@ -10,6 +10,15 @@ export function Authenticator({ me }: { me: Me }) {
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
   const [error, setError] = useState<unknown>(null);
 
+  if (!me.totp.enabled && !me.totp.enrolled) {
+    return (
+      <Page title="Authenticator">
+        <p>ECR does not use an authenticator app: signing in with DWS Hub is all you need.</p>
+        <a className="button" href="/">Back to Home</a>
+      </Page>
+    );
+  }
+
   async function start() {
     setError(null);
     try {
