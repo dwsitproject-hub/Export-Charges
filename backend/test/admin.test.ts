@@ -62,7 +62,7 @@ describe('authenticator step-up, user administration and audit log', () => {
       expect(new Set(ok.body.recoveryCodes).size).toBe(10);
 
       const after = await h.me(agent);
-      expect(after.totp).toEqual({ enrolled: true, required: true, enrollmentRequired: false });
+      expect(after.totp).toEqual({ enabled: true, enrolled: true, required: true, enrollmentRequired: false });
       await agent.get('/api/admin/users').expect(200);
 
       const again = await agent.post('/api/auth/totp/enroll').set('X-CSRF-Token', me.csrfToken).expect(409);
@@ -196,7 +196,7 @@ describe('authenticator step-up, user administration and audit log', () => {
       await post(userAdmin, `/api/admin/users/${maker.me.user.id}/reset-totp`, { reason: 'Lost phone' }).expect(200);
       await maker.agent.get('/api/auth/me').expect(401); // sessions ended
       const { me } = await h.signedIn(undefined, { sub: (await h.pool.query('SELECT subject FROM ecr.user_identity WHERE user_id = $1', [maker.me.user.id])).rows[0].subject, email: maker.me.user.email });
-      expect(me.totp).toEqual({ enrolled: false, required: true, enrollmentRequired: true });
+      expect(me.totp).toEqual({ enabled: true, enrolled: false, required: true, enrollmentRequired: true });
     });
 
     it('revokes a user\'s sessions without step-up', async () => {

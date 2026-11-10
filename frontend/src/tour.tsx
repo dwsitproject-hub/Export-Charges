@@ -69,6 +69,8 @@ export function TourHost({ me }: { me: Me }) {
   const [box, setBox] = useState<Box | null>(null);
   const [ready, setReady] = useState(false);
   const card = useRef<HTMLDivElement>(null);
+  // The window size, so the card is laid out again when a phone is rotated or the window resized.
+  const [, setViewport] = useState(() => `${window.innerWidth}x${window.innerHeight}`);
   const element = useRef<HTMLElement | null>(null);
 
   const open = useCallback(async () => {
@@ -123,6 +125,7 @@ export function TourHost({ me }: { me: Me }) {
       }
     }
     const measure = () => {
+      setViewport(`${window.innerWidth}x${window.innerHeight}`);
       const target = element.current;
       if (!target) return setBox(null);
       const r = target.getBoundingClientRect();

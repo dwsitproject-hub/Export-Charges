@@ -237,6 +237,8 @@ describe('charge calculator and catalogue', () => {
     const long = await catalogue(`q=${'a'.repeat(250)}`);
     expect(long.notices).toContain('The search was shortened to 200 characters.');
     expect((await catalogue('q=glicerine')).suggestion).toBe('glycerine');
+    // A phrase with a short misspelt word: each word is corrected (one letter off for short words).
+    expect((await catalogue(`q=${encodeURIComponent('crude palm oyl')}`)).suggestion).toBe('crude palm oil');
   });
 
   it('filters with counts and sorts amounts without mixing units (US-42)', async () => {

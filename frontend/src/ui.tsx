@@ -229,7 +229,7 @@ function UserMenu({ me }: { me: Me }) {
           <strong>{me.user.fullName}</strong>
           <div className="muted">{me.user.email}</div>
         </div>
-        <a href="/settings/authenticator">Authenticator {me.totp.enrolled ? '' : '(not set up)'}</a>
+        {me.totp.enabled && <a href="/settings/authenticator">Authenticator {me.totp.enrolled ? '' : '(not set up)'}</a>}
         <a href="/notifications">Notifications and following</a>
         <button type="button" onClick={() => { if (menu.current) menu.current.open = false; startTour(); }}>Take the app tour again</button>
         <button type="button" disabled={busy} onClick={() => signOut(false)}>Sign out</button>

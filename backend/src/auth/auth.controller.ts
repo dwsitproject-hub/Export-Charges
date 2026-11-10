@@ -176,7 +176,7 @@ export class AuthController {
         id: user.id, email: user.email, fullName: user.full_name, roles, permissions, privileged, hubSubject: hub?.subject ?? null,
         tourSeenAt: tour?.tour_seen_at ?? null,
       },
-      totp: { enrolled, required: totpRequired, enrollmentRequired: totpRequired && !enrolled },
+      totp: { enabled: this.config.totpEnabled, enrolled, required: totpRequired, enrollmentRequired: totpRequired && !enrolled },
       session: {
         id: session.id,
         authMethod: session.auth_method,

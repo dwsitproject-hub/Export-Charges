@@ -40,11 +40,11 @@ Specs: [PRD](docs/02-PRD-Export-Duty-Levy-Platform.md) · [Technical Design](htt
 | Web app layout: sidebar menu showing only what the person may use, home dashboard (work waiting, reference prices, notifications, recent versions), light and dark themes from the prototype's palette, usable from 360 px, sticky table headers | Done |
 
 **Access model.** DWS Hub owns who may use ECR (its own invitations and access requests). ECR creates the
-account at first sign-in and owns roles, account status, sessions and the audit trail. Privileged roles
-(MAKER, CHECKER, USER_ADMIN, AUDITOR) must set up an authenticator app before using any protected function, and
-confirm a code before sensitive actions — DWS Hub does not yet report MFA (Technical Design T-01). Roles listed in
-`TOTP_EXEMPT_ROLES` (default `SUPER_ADMIN`) neither enrol nor confirm codes and rely on the DWS Hub sign-in alone; set
-`TOTP_EXEMPT_ROLES=` (empty) to require the authenticator of Super Admins too. The Configuration page shows the setting.
+account at first sign-in and owns roles, account status, sessions and the audit trail. ECR's own authenticator app
+is **not used** by default (`TOTP_REQUIRED=false`): the DWS Hub sign-in is enough and nobody is asked to set one up or
+confirm codes. With `TOTP_REQUIRED=true`, privileged roles (MAKER, CHECKER, USER_ADMIN, AUDITOR, SUPER_ADMIN) must set
+one up before using a protected function and confirm a code before sensitive actions, except the roles listed in
+`TOTP_EXEMPT_ROLES` (default `SUPER_ADMIN`). The Configuration page shows the setting.
 
 ## API
 
@@ -315,7 +315,7 @@ request. Other API instances reload saved values every `SETTINGS_REFRESH_MS` (de
 A saved calculation keeps the disclaimer it was made with, so replays and evidence packs still match after the wording
 changes. A stored value that breaks the limits (edited in the database) is ignored with a warning and the default used.
 The DWS Hub client, redirect URI, mail, virus scan and cookie settings are shown read-only: they need a deployment. The
-authenticator rule for privileged roles is set by `TOTP_EXEMPT_ROLES` (deployment). Email templates (FR-CFG-01) are not configurable yet.
+authenticator rule is set by `TOTP_REQUIRED` and `TOTP_EXEMPT_ROLES` (deployment). Email templates (FR-CFG-01) are not configurable yet.
 
 ### Scheduled jobs
 

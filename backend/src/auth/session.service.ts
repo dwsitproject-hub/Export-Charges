@@ -159,7 +159,7 @@ export class SessionService {
       roles,
       permissions: [...new Set(rows.map((r) => r.permission).filter((p): p is string => !!p))].sort(),
       privileged,
-      totpRequired: privileged && !roles.some((r) => this.config.totpExemptRoles.includes(r)),
+      totpRequired: this.config.totpEnabled && privileged && !roles.some((r) => this.config.totpExemptRoles.includes(r)),
     };
   }
 }

@@ -1,6 +1,6 @@
 export interface Me {
   user: { id: string; email: string; fullName: string; roles: string[]; permissions: string[]; privileged: boolean; hubSubject: string | null; tourSeenAt: string | null };
-  totp: { enrolled: boolean; required: boolean; enrollmentRequired: boolean };
+  totp: { enabled: boolean; enrolled: boolean; required: boolean; enrollmentRequired: boolean };
   session: { id: string; authMethod: string; absoluteExpiresAt: string; idleTimeoutMinutes: number; steppedUpAt: string | null };
   csrfToken: string;
   hubDashboardUrl: string;

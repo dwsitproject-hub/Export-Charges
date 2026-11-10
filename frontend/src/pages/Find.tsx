@@ -192,6 +192,13 @@ function ChargeCard({ c }: { c: Charge }) {
   );
 }
 
+/** What a percentage is taken of: the reference price (e.g. CPO, for the palm levy) or the export price (Harga Ekspor). */
+function rateBase(c: Charge): string {
+  if (c.basisType === 'PCT_OF_REF_PRICE') return `the ${c.referencePrice?.seriesCode ?? ''} reference price`.replace('the  ', 'the ');
+  if (c.basisType === 'AD_VALOREM_PCT') return 'the export price (Harga Ekspor)';
+  return 'the price';
+}
+
 /** The chain behind each charge: reference price → band or rate → the regulation line (BR-CAL-08). */
 function Why({ row }: { row: CatalogueRow }) {
   const charges = [row.bk, row.pe].filter((c) => c.line || c.referencePrice);
@@ -215,7 +222,7 @@ function Why({ row }: { row: CatalogueRow }) {
           <span className="num">{++n}</span>
           <span className="body">
             <strong>
-              {c.chargeType === 'BK' ? 'Duty' : 'Levy'}: {c.band ? `price band ${c.band.label} gives ` : c.rate ? `${c.rate} % of the export price gives ` : ''}
+              {c.chargeType === 'BK' ? 'Duty' : 'Levy'}: {c.band ? `price band ${c.band.label} gives ` : c.rate ? `${c.rate} % of ${rateBase(c)} gives ` : ''}
               {c.status === 'CHARGED' ? `USD ${formatDecimal(c.usdPerMt)} per tonne` : c.status === 'LISTED_ZERO' ? 'zero' : (c.message ?? 'no amount')}
             </strong>
             {c.line && (

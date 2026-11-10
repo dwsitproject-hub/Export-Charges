@@ -38,6 +38,7 @@ export function testConfig(hubIssuer: string, overrides: Record<string, string> 
     JIT_DEFAULT_ROLES: 'VIEWER',
     // Tests exercise the authenticator on every privileged role; the Super Admin exemption has its own test.
     TOTP_EXEMPT_ROLES: '',
+    TOTP_REQUIRED: 'true',
     // No test reads the real official websites; the auto-update test turns it on with stand-in pages.
     AUTO_UPDATE: 'false',
     MALWARE_SCAN_REQUIRED: 'false',

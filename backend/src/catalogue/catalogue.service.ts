@@ -230,12 +230,14 @@ export class CatalogueService {
     const vocabulary = new Set(rows.flatMap((r) => r.search.split(/[^\p{L}\p{N}]+/u)).filter((w) => w.length >= 3));
     let changed = false;
     const words = fold(q).split(/\s+/).filter(Boolean).map((w) => {
-      if (vocabulary.has(w) || w.length < 4) return w;
+      if (vocabulary.has(w) || w.length < 3) return w;
+      // Short words may be one letter off ("oyl" → "oil"), longer ones two.
+      const limit = w.length <= 4 ? 1 : 2;
       let best: { word: string; d: number } | null = null;
       for (const v of vocabulary) {
-        if (Math.abs(v.length - w.length) > 2) continue;
+        if (Math.abs(v.length - w.length) > limit) continue;
         const d = levenshtein(w, v);
-        if (d <= 2 && (!best || d < best.d)) best = { word: v, d };
+        if (d <= limit && (!best || d < best.d)) best = { word: v, d };
       }
       if (best) changed = true;
       return best?.word ?? w;
