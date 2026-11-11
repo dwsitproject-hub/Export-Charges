@@ -2,6 +2,8 @@ import { DynamicModule, Module } from '@nestjs/common';
 import { AccessReviewsController } from './access-reviews/access-reviews.controller';
 import { AccessReviewsService } from './access-reviews/access-reviews.service';
 import { UsersAdminController } from './admin/users-admin.controller';
+import { RolesAdminController } from './admin/roles-admin.controller';
+import { PageAccessService } from './admin/page-access';
 import { SettingsController } from './settings/settings.controller';
 import { SettingsService } from './settings/settings.service';
 import { UsersAdminService } from './admin/users-admin.service';
@@ -57,6 +59,7 @@ export class AppModule {
         AuthController,
         StepUpController,
         UsersAdminController,
+        RolesAdminController,
         AccessReviewsController,
         SettingsController,
         AuditController,
@@ -84,6 +87,7 @@ export class AppModule {
         UserBindingService,
         TotpService,
         UsersAdminService,
+        PageAccessService,
         AccessReviewsService,
         SettingsService,
         RegistryReadService,

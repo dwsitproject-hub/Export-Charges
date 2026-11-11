@@ -10,13 +10,13 @@ export class JobsController {
 
   /** Each job with its schedule and last run (Auditors and Super Admins). */
   @Get('jobs')
-  @Authorize({ permissions: ['audit.read'] })
+  @Authorize({ permissions: ['page.jobs'] })
   list() {
     return this.jobs.list();
   }
 
   @Get('jobs/:name/runs')
-  @Authorize({ permissions: ['audit.read'] })
+  @Authorize({ permissions: ['page.jobs'] })
   history(@Param('name') name: string) {
     return this.jobs.history(name);
   }

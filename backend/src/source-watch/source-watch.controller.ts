@@ -11,7 +11,7 @@ export class SourceWatchController {
 
   /** Items (open first) and the last run; anyone who reads change sets. */
   @Get()
-  @Authorize({ permissions: ['changeset.read'] })
+  @Authorize({ permissions: ['page.source_watch'] })
   list(@Query('status') status?: string) {
     return this.watch.list(status);
   }

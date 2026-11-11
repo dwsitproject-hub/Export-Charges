@@ -91,7 +91,7 @@ export class AuditController {
 
   /** ?actor=&action=a,b&actorUserId=&entityType=&entityId=&from=&to=&before=&limit= */
   @Get()
-  @Authorize({ permissions: ['audit.read'] })
+  @Authorize({ permissions: ['page.audit'] })
   async search(@Query() q: Record<string, string | undefined>) {
     const limit = Math.min(Math.max(Number(q.limit ?? 50) || 50, 1), 200);
     const before = q.before ? Number(q.before) : null;
@@ -124,7 +124,7 @@ export class AuditController {
 
   /** The actions and entity types present, with counts, for the filters. */
   @Get('facets')
-  @Authorize({ permissions: ['audit.read'] })
+  @Authorize({ permissions: ['page.audit'] })
   async facets() {
     const { rows: actions } = await this.db.query<{ value: string; count: number }>(
       'SELECT action AS value, count(*)::int AS count FROM ecr.audit_event GROUP BY action ORDER BY action',
@@ -137,7 +137,7 @@ export class AuditController {
 
   /** Recomputes the whole hash chain (Technical Design §4.2.8). */
   @Get('verify')
-  @Authorize({ permissions: ['audit.read'] })
+  @Authorize({ permissions: ['page.audit'] })
   verify() {
     return this.verifyChain();
   }
