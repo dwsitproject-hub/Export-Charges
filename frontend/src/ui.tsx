@@ -10,10 +10,10 @@ interface NavItem { href: string; label: string; hint?: string; perm?: string; a
 
 /** The everyday tasks, always in view as tabs; `also` lists pages that belong to a tab. */
 const TABS: NavItem[] = [
-  { href: '/', label: 'Full product table', perm: 'catalogue.read', also: ['/catalogue'] },
-  { href: '/find', label: 'Find a product', perm: 'catalogue.read', also: ['/products'] },
+  { href: '/', label: 'Full product table', perm: 'page.catalogue', also: ['/catalogue'] },
+  { href: '/find', label: 'Find a product', perm: 'page.find' },
   { href: '/calculator', label: 'Calculate a shipment', perm: 'calc.run', also: ['/calculations'] },
-  { href: '/policy-history', label: 'Policy History', perm: 'catalogue.read', also: ['/updates', '/bulletins'] },
+  { href: '/policy-history', label: 'Policy History', perm: 'page.policy_history', also: ['/updates', '/bulletins'] },
 ];
 
 /** "More tools": everything else, grouped; an item shows when the person holds its permission (the API enforces it either way). */
@@ -22,11 +22,11 @@ const MORE: { title: string; items: NavItem[] }[] = [
     title: 'Look things up',
     items: [
       { href: '/calculations', label: 'Saved calculations', perm: 'calc.run' },
-      { href: '/regulations', label: 'Regulations', hint: 'The decrees behind the rates', perm: 'catalogue.read' },
-      { href: '/products', label: 'Product list', perm: 'catalogue.read' },
-      { href: '/schedules', label: 'Rate tables', hint: 'Duty and levy by price band', perm: 'catalogue.read' },
-      { href: '/prices', label: 'Reference prices', perm: 'catalogue.read' },
-      { href: '/sources', label: 'Official documents', perm: 'catalogue.read' },
+      { href: '/regulations', label: 'Regulations', hint: 'The decrees behind the rates', perm: 'page.regulations' },
+      { href: '/products', label: 'Product list', perm: 'page.products' },
+      { href: '/schedules', label: 'Rate tables', hint: 'Duty and levy by price band', perm: 'page.schedules' },
+      { href: '/prices', label: 'Reference prices', perm: 'page.prices' },
+      { href: '/sources', label: 'Official documents', perm: 'page.sources' },
       { href: '/exports', label: 'My downloads', perm: 'export.run' },
     ],
   },
@@ -36,7 +36,7 @@ const MORE: { title: string; items: NavItem[] }[] = [
       { href: '/change-sets', label: 'Rate updates', hint: 'Enter, review and approve changes', perm: 'changeset.read' },
       { href: '/imports', label: 'Import a file', perm: 'import.run' },
       { href: '/data-quality', label: 'Data checks', perm: 'dq.read' },
-      { href: '/source-watch', label: 'New regulation watch', perm: 'changeset.read' },
+      { href: '/source-watch', label: 'New regulation watch', perm: 'page.source_watch' },
     ],
   },
   {
@@ -44,8 +44,8 @@ const MORE: { title: string; items: NavItem[] }[] = [
     items: [
       { href: '/admin/users', label: 'Users', perm: 'user.manage' },
       { href: '/admin/reviews', label: 'Access reviews', perm: 'accessreview.read' },
-      { href: '/admin/audit', label: 'Audit log', perm: 'audit.read' },
-      { href: '/admin/jobs', label: 'Background jobs', perm: 'audit.read' },
+      { href: '/admin/audit', label: 'Audit log', perm: 'page.audit' },
+      { href: '/admin/jobs', label: 'Background jobs', perm: 'page.jobs' },
       { href: '/admin/config', label: 'Settings', perm: 'config.manage' },
     ],
   },

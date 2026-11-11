@@ -92,7 +92,37 @@ function startAutoSignIn(): boolean {
   return autoSignInDecision;
 }
 
+/** The permission that opens each page (set per role in Users → Roles and access); the menu uses the same list. */
+export const PAGE_PERMISSIONS: [string, string][] = [
+  ['/catalogue', 'page.catalogue'], ['/find', 'page.find'], ['/calculator', 'calc.run'], ['/calculations', 'calc.run'],
+  ['/policy-history', 'page.policy_history'], ['/updates', 'page.policy_history'], ['/regulations', 'page.regulations'],
+  ['/products', 'page.products'], ['/schedules', 'page.schedules'], ['/prices', 'page.prices'], ['/sources', 'page.sources'],
+  ['/exports', 'export.run'], ['/change-sets', 'changeset.read'], ['/imports', 'import.run'], ['/data-quality', 'dq.read'],
+  ['/source-watch', 'page.source_watch'], ['/admin/users', 'user.manage'], ['/admin/reviews', 'accessreview.read'],
+  ['/admin/audit', 'page.audit'], ['/admin/jobs', 'page.jobs'], ['/admin/config', 'config.manage'],
+];
+
+/** The first main page this person may open: where "/" takes them when the product table is closed to their role. */
+const LANDING = ['/', '/find', '/calculator', '/policy-history'];
+
+function NoAccess() {
+  return (
+    <Page title="No access">
+      <p>Your role does not include this page. If you need it, ask a Super Admin to open it for your role (Users → Roles and access).</p>
+      <a className="button" href="/">Go to the start page</a>
+    </Page>
+  );
+}
+
+function GoTo({ href }: { href: string }) {
+  useEffect(() => window.location.replace(href), [href]);
+  return <Page title="Opening…" nav={false}>{null}</Page>;
+}
+
 function route(path: string, me: Me): ReactNode {
+  const perms = me.user.permissions;
+  const need = PAGE_PERMISSIONS.find(([prefix]) => path === prefix || path.startsWith(`${prefix}/`));
+  if (need && !perms.includes(need[1])) return <NoAccess />;
   if (path === '/settings/authenticator') return <Authenticator me={me} />;
   if (path === '/admin/users') return <AdminUsers me={me} />;
   if (path === '/regulations') return <RegulationsPage />;
@@ -131,7 +161,9 @@ function route(path: string, me: Me): ReactNode {
   if (evidence) return <VerifyEvidencePage id={evidence[1]} />;
   // The landing page: the full product table (also at /catalogue for old links).
   if (path === '/' || path === '/catalogue') {
-    if (!me.user.permissions.includes('catalogue.read')) {
+    if (!perms.includes('page.catalogue')) {
+      const first = LANDING.slice(1).find((p) => perms.includes(PAGE_PERMISSIONS.find(([prefix]) => prefix === p)![1]));
+      if (first) return <GoTo href={first} />;
       return (
         <Page title="Welcome to Export Charges">
           <p>Your account has no role yet, so there is nothing to look up. Ask your administrator for access.</p>

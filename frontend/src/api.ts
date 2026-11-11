@@ -96,6 +96,13 @@ export const createUser = (input: { email: string; fullName: string; department:
   api<UserSummary>('/admin/users', { method: 'POST', body: input });
 export const updateUser = (id: string, input: { email?: string; fullName?: string; department?: string; reason: string }) =>
   api<UserSummary>(`/admin/users/${id}`, { method: 'PATCH', body: input });
+export interface RoleAccessMatrix {
+  pages: { key: string; label: string; group: string; hint: string; levels: { key: string; label: string }[] }[];
+  roles: { code: string; name: string; access: Record<string, string>; locked: Record<string, string> }[];
+}
+export const getRoleAccess = () => api<RoleAccessMatrix>('/admin/roles/access');
+export const saveRoleAccess = (role: string, access: Record<string, string>, reason: string) =>
+  api<{ role: string; changed: string[] }>(`/admin/roles/${role}/access`, { method: 'PUT', body: { access, reason } });
 export const deleteUser = (id: string, reason: string) =>
   api<{ id: string; result: 'REMOVED' | 'ANONYMISED' }>(`/admin/users/${id}`, { method: 'DELETE', body: { reason } });
 

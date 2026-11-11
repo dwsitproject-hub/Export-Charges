@@ -39,6 +39,8 @@ Specs: [PRD](docs/02-PRD-Export-Duty-Levy-Platform.md) · [Technical Design](htt
 | Configuration screen: session limits, step-up window, roles at first sign-in, network allow-list, disclaimer — bounded, audited, applied at once | Done |
 | Web app layout: menu showing only what the person may use — Full product table (the landing page, with the CPO reference price and a what-if price), Find a product, Calculate a shipment, Policy History (regulations, reference prices and data updates over time), More tools; light and dark themes from the prototype's palette, usable from 360 px, sticky table headers | Done |
 
+**Page access by role.** A Super Admin decides, per role, which pages and menu entries it can open and what it can do there (Users → Roles and access; migration 0019 gives each look-up page its own `page.*` permission, so they open and close independently). Menus and pages follow it; the Audit log, Background jobs and New regulation watch APIs check it too, and actions that change data keep their own permissions. The published data behind the look-up pages stays readable through `catalogue.read` while a role can open any of them.
+
 **Access model.** DWS Hub owns who may use ECR (its own invitations and access requests). ECR creates the
 account at first sign-in and owns roles, account status, sessions and the audit trail. ECR's own authenticator app
 is **not used** by default (`TOTP_REQUIRED=false`): the DWS Hub sign-in is enough and nobody is asked to set one up or
@@ -59,6 +61,8 @@ one up before using a protected function and confirm a code before sensitive act
 | `GET /api/admin/users?q=&status=&role=` · `GET /api/admin/users/{id}` | `user.manage` | |
 | `POST /api/admin/users` | `user.manage` + step-up | `{"email", "fullName", "department", "roles": [...], "reason"}`: adds a person as INVITED; their first DWS Hub sign-in with that email links and activates the account with those roles; 409 `EMAIL_TAKEN` |
 | `PATCH /api/admin/users/{id}` | `user.manage` + step-up | `{"fullName", "department", "email", "reason"}`; the email only while INVITED (then 409 `EMAIL_FROM_HUB`) |
+| `GET /api/admin/roles/access` | `user.manage` | Users → Roles and access: every page or menu entry with its access levels, and each role's current level (derived from its permissions); Super Admin's Users and Settings are locked |
+| `PUT /api/admin/roles/{code}/access` | `role.manage` + step-up | `{"access": {"<page>": "<level>"}, "reason"}`: sets the role's permissions to the union of the chosen levels (permissions no page manages are kept); takes effect at once; audited as `ROLE_ACCESS_CHANGED`; 422 `ACCESS_LOCKED` (Super Admin's Users/Settings), `SOD_CONFLICT` (User Admin entering or approving rate updates) |
 | `DELETE /api/admin/users/{id}` | `user.manage` + step-up | `{"reason"}`: an unused INVITED account is removed (`REMOVED`); one with history is anonymised — roles, sessions, authenticator, follows and Hub link removed, name and email erased, DEACTIVATED and hidden (`ANONYMISED`), so the person can be added again. Never yourself; at least two Super Admins remain |
 | `PUT /api/admin/users/{id}/roles` | `user.manage` + step-up | `{"roles": [...], "reason": "..."}`; ends the user's sessions |
 | `POST /api/admin/users/{id}/deactivate` · `/reactivate` · `/reset-totp` | `user.manage` + step-up | `{"reason"}` required |

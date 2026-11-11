@@ -638,3 +638,20 @@ a.palm-row:hover strong { color: var(--accent-strong); }
   .catalogue-search { flex: 1 1 100%; }
   .catalogue-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Users: tabs and the Roles and access grid */
+.page-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: 0 0 16px; }
+.page-tabs button { border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: none; padding: 10px 14px; font-weight: 650; color: var(--muted); min-height: 0; }
+.page-tabs button[aria-selected=true] { color: var(--ink); border-bottom-color: var(--accent); }
+.access-table { width: 100%; border-collapse: collapse; font-size: 14px; table-layout: fixed; min-width: 900px; }
+.access-table thead th:first-child { width: 230px; }
+.access-table th, .access-table td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
+.access-table thead th { position: sticky; top: 0; background: var(--panel); font-size: 13px; color: var(--muted); white-space: nowrap; }
+.access-table tr.group th { background: var(--subtle); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); }
+.access-table tbody th[scope=row] { font-weight: 400; white-space: normal; overflow-wrap: anywhere; }
+.access-table tbody th[scope=row] strong { display: block; }
+.access-table tbody th[scope=row] span { display: block; font-size: 12px; color: var(--muted); }
+.access-table select { min-height: 34px; padding: 4px 6px; font-size: 13px; width: 100%; min-width: 0; }
+.access-table td.lvl-none select { color: var(--muted); }
+.access-table td.changed { background: var(--warn); }
+.access-save { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; max-width: 640px; }

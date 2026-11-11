@@ -93,7 +93,7 @@ export function TourHost({ me }: { me: Me }) {
       params.delete('tour');
       window.history.replaceState(null, '', `${window.location.pathname}${params.toString() ? `?${params}` : ''}`);
     }
-    if (window.location.pathname === '/' && me.user.permissions.includes('catalogue.read') && (asked || !me.user.tourSeenAt)) void open();
+    if (window.location.pathname === '/' && me.user.permissions.includes('page.catalogue') && (asked || !me.user.tourSeenAt)) void open();
     return () => window.removeEventListener('ecr:tour', onStart);
   }, [open]);
 

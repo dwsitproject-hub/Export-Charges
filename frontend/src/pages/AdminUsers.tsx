@@ -1,5 +1,5 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import { ALL_ROLES, ApiFailure, createUser, deleteUser, listUsers, Me, setUserRoles, updateUser, userAction, UserSummary } from '../api';
+import { Fragment, useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { ALL_ROLES, ApiFailure, createUser, deleteUser, getRoleAccess, listUsers, Me, RoleAccessMatrix, saveRoleAccess, setUserRoles, updateUser, userAction, UserSummary } from '../api';
 import { ErrorText, Page, roleName, TableWrap, useStepUp } from '../ui';
 
 type Action = 'deactivate' | 'reactivate' | 'reset-totp' | 'revoke-sessions';
@@ -35,6 +35,11 @@ export function AdminUsers({ me }: { me: Me }) {
   const [adding, setAdding] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const [tab, setTab] = useState<'people' | 'access'>(() => (new URLSearchParams(window.location.search).get('tab') === 'access' ? 'access' : 'people'));
+  const openTab = (t: 'people' | 'access') => {
+    setTab(t);
+    window.history.replaceState(null, '', t === 'access' ? '/admin/users?tab=access' : '/admin/users');
+  };
 
   async function load(q = query) {
     try {
@@ -67,9 +72,17 @@ export function AdminUsers({ me }: { me: Me }) {
   return (
     <Page
       title="Users"
-      actions={<button type="button" className="primary" onClick={() => { setAdding(true); setSelected(null); setNotice(null); }}>Add user</button>}
-      intro={`Add people before they first sign in, give them the right role, and keep the list up to date. Everyone signs in with DWS Hub; someone who signs in without being added starts as a Viewer. Every change needs a reason${me.totp.enabled ? ' and an authenticator code' : ''}.`}
+      wide={tab === 'access'}
+      actions={tab === 'people' ? <button type="button" className="primary" onClick={() => { setAdding(true); setSelected(null); setNotice(null); }}>Add user</button> : undefined}
+      intro={tab === 'people'
+        ? `Add people before they first sign in, give them the right role, and keep the list up to date. Everyone signs in with DWS Hub; someone who signs in without being added starts as a Viewer. Every change needs a reason${me.totp.enabled ? ' and an authenticator code' : ''}.`
+        : 'Choose, for each role, which pages and menus it can open and what it can do on them. Changes apply to everyone with the role at their next click.'}
     >
+      <div className="page-tabs" role="tablist" aria-label="Users">
+        <button type="button" role="tab" aria-selected={tab === 'people'} onClick={() => openTab('people')}>People</button>
+        <button type="button" role="tab" aria-selected={tab === 'access'} onClick={() => openTab('access')}>Roles and access</button>
+      </div>
+      {tab === 'access' ? <RolesAccess canEdit={me.user.permissions.includes('role.manage')} /> : (<>
       {notice && <p className="callout ok" role="status">{notice}</p>}
       {adding && (
         <AddPanel
@@ -120,6 +133,7 @@ export function AdminUsers({ me }: { me: Me }) {
           onClose={() => setSelected(null)}
         />
       )}
+      </>)}
     </Page>
   );
 }
@@ -305,5 +319,125 @@ function ManagePanel({ user, superAdmin, totpEnabled, onChanged, onDeleted, onCl
       </div>
       {dialog}
     </Panel>
+  );
+}
+
+/**
+ * Roles and access: for each role, the access level of every page and menu entry. Super Admins change it; User Admins
+ * see it. Changes are saved per role, with a reason, and audited.
+ */
+function RolesAccess({ canEdit }: { canEdit: boolean }) {
+  const [matrix, setMatrix] = useState<RoleAccessMatrix | null>(null);
+  const [draft, setDraft] = useState<Record<string, Record<string, string>>>({});
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState<unknown>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const { run, dialog } = useStepUp();
+
+  async function load() {
+    try {
+      const m = await getRoleAccess();
+      setMatrix(m);
+      setDraft(Object.fromEntries(m.roles.map((r) => [r.code, { ...r.access }])));
+    } catch (e) {
+      setError(e);
+    }
+  }
+  useEffect(() => { void load(); }, []);
+
+  if (!matrix) return <>{error ? <ErrorText error={error} /> : <p className="muted">Loading…</p>}</>;
+  const changedRoles = matrix.roles.filter((r) => matrix.pages.some((p) => draft[r.code]?.[p.key] !== r.access[p.key]));
+  const changes = changedRoles.reduce((n, r) => n + matrix.pages.filter((p) => draft[r.code][p.key] !== r.access[p.key]).length, 0);
+  const groups = [...new Set(matrix.pages.map((p) => p.group))];
+
+  async function save() {
+    if (reason.trim().length < 3) { setError(new Error('Enter a reason of at least 3 characters first.')); return; }
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const saved: string[] = [];
+      await run(async () => {
+        for (const r of changedRoles) {
+          const access = Object.fromEntries(matrix!.pages.filter((p) => draft[r.code][p.key] !== r.access[p.key]).map((p) => [p.key, draft[r.code][p.key]]));
+          await saveRoleAccess(r.code, access, reason.trim());
+          saved.push(r.name);
+        }
+      });
+      setNotice(`Saved for ${saved.join(', ')}. It applies to everyone with ${saved.length === 1 ? 'that role' : 'those roles'} from their next click.`);
+      setReason('');
+      await load();
+    } catch (e) {
+      setError(e);
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section aria-label="Roles and access">
+      {!canEdit && <p className="callout">Only a Super Admin can change this. You can see what each role can open.</p>}
+      {notice && <p className="callout ok" role="status">{notice}</p>}
+      <ErrorText error={error} />
+      <TableWrap><table className="access-table">
+        <thead>
+          <tr>
+            <th scope="col">Page or menu</th>
+            {matrix.roles.map((r) => <th scope="col" key={r.code}>{r.name}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {groups.map((g) => (
+            <Fragment key={g}>
+              <tr className="group"><th colSpan={matrix.roles.length + 1} scope="colgroup">{g}</th></tr>
+              {matrix.pages.filter((p) => p.group === g).map((p) => (
+                <tr key={p.key}>
+                  <th scope="row"><strong>{p.label}</strong><span>{p.hint}</span></th>
+                  {matrix.roles.map((r) => {
+                    const value = draft[r.code][p.key];
+                    const locked = r.locked[p.key];
+                    const changed = value !== r.access[p.key];
+                    return (
+                      <td key={r.code} className={`${changed ? 'changed' : ''} lvl-${value.toLowerCase()}`}>
+                        <select
+                          aria-label={`${p.label} for ${r.name}`}
+                          value={value}
+                          disabled={!canEdit || Boolean(locked) || busy}
+                          title={locked ? `${r.name} always keeps this, so ECR can never be locked out of its administration` : undefined}
+                          onChange={(e) => setDraft({ ...draft, [r.code]: { ...draft[r.code], [p.key]: e.target.value } })}
+                        >
+                          {p.levels.map((l) => <option key={l.key} value={l.key}>{l.label}</option>)}
+                        </select>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </Fragment>
+          ))}
+        </tbody>
+      </table></TableWrap>
+      {canEdit && (
+        <div className="access-save">
+          <label className="field-stack">
+            <span>Reason <span className="help">(recorded in the audit log)</span></span>
+            <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Checkers follow the automatic updates" />
+          </label>
+          <div className="actions">
+            <button type="button" className="primary" disabled={busy || !changes} onClick={() => void save()}>
+              {changes ? `Save ${changes} change${changes === 1 ? '' : 's'}` : 'No changes'}
+            </button>
+            <button type="button" disabled={busy || !changes} onClick={() => setDraft(Object.fromEntries(matrix.roles.map((r) => [r.code, { ...r.access }])))}>Undo</button>
+          </div>
+          <p className="small muted">
+            "View" opens the page and its menu entry; the other levels add what the role can do there. Super Admins always keep Users and Settings.
+            A User Admin cannot enter or approve rate updates. The published data behind the look-up pages stays readable while a role can open any of them.
+          </p>
+        </div>
+      )}
+      {dialog}
+    </section>
   );
 }
