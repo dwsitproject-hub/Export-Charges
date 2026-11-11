@@ -37,7 +37,7 @@ Specs: [PRD](docs/02-PRD-Export-Duty-Levy-Platform.md) · [Technical Design](htt
 | Daily source watch: BPK status and amendments of registered regulations, new PMK and Kepmendag documents on the official listings, new files on JDIH pages, changed official PDFs — reported to Makers, never published | Done |
 | Quarterly access reviews: keep or revoke each role assignment, 14-day escalation, signed PDF/A report for auditors | Done |
 | Configuration screen: session limits, step-up window, roles at first sign-in, network allow-list, disclaimer — bounded, audited, applied at once | Done |
-| Web app layout: sidebar menu showing only what the person may use, home dashboard (work waiting, reference prices, notifications, recent versions), light and dark themes from the prototype's palette, usable from 360 px, sticky table headers | Done |
+| Web app layout: menu showing only what the person may use — Full product table (the landing page, with the CPO reference price and a what-if price), Find a product, Calculate a shipment, Policy History (regulations, reference prices and data updates over time), More tools; light and dark themes from the prototype's palette, usable from 360 px, sticky table headers | Done |
 
 **Access model.** DWS Hub owns who may use ECR (its own invitations and access requests). ECR creates the
 account at first sign-in and owns roles, account status, sessions and the audit trail. ECR's own authenticator app
@@ -83,7 +83,7 @@ one up before using a protected function and confirm a code before sensitive act
 | `GET /api/change-sets/{id}/impact?date=` | `changeset.read` | Per affected product: BK and PE per tonne with the published data and with the set applied |
 | `GET /api/ref-series?date=` · `GET /api/ref-series/{entityId}` | `catalogue.read` | Series with the value in force on the date and the latest value; detail lists every value with its decree |
 | `GET /api/band-tables` · `GET /api/schedules?chargeType=` · `GET /api/schedules/{entityId}` | `catalogue.read` | Schedule detail lists its lines with band amounts and linked products |
-| `GET /api/catalogue?q=&date=&version=&commodity=&group=&category=&regulation=&sharedHs=&sort=&dir=&page=&pageSize=` | `catalogue.read` | Multi-select filters comma-separated; returns rows, facet counts, KPI tiles, reference prices with their band, notices and a "did you mean" suggestion |
+| `GET /api/catalogue?q=&date=&version=&commodity=&group=&category=&regulation=&sharedHs=&sort=&dir=&page=&pageSize=&refPrice=` | `catalogue.read` | Multi-select filters comma-separated; returns rows, facet counts, KPI tiles, reference prices with their band, notices and a "did you mean" suggestion. `refPrice` (US$/MT) is a what-if CPO reference price: band, duty, levy and totals are worked out at it and `simulation` shows it next to the published one; nothing is saved and exports ignore it |
 | `POST /api/calculations/preview` · `POST /api/calculations` | `calc.run` | `{lines: [{productId, quantityMt}], pebDate?, paymentDate?, refPriceOverride?, versionNo?}`; preview is not stored |
 | `GET /api/calculations` · `GET /api/calculations/{id}` · `GET /api/calculations/{id}/verify` · `GET /api/calculations/products?date=` | `calc.run` | Own calculations only; verify replays the inputs at the stored data version and compares the result hash |
 | `GET /api/products/{entityId}/charges?date=` | `catalogue.read` | BK and PE per tonne on the date, with basis, band, reference price or Harga Ekspor used, decree and legal reference |

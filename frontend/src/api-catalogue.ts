@@ -46,6 +46,8 @@ export interface CatalogueResponse {
   pageSize: number;
   rows: CatalogueRow[];
   suggestion: string | null;
+  /** A what-if CPO reference price (?refPrice=): every charge is worked out at it; nothing is saved. */
+  simulation: { code: string; value: string; published: CatalogueResponse['referencePrices'][number] | null } | null;
 }
 
 export const getCatalogue = (params: URLSearchParams) => api<CatalogueResponse>(`/catalogue?${params.toString()}`);
@@ -105,6 +107,7 @@ export function exportUrl(path: 'catalogue' | `calculations/${string}`, format: 
   const q = new URLSearchParams(params);
   q.delete('page');
   q.delete('pageSize');
+  q.delete('refPrice'); // exports always use the published prices
   q.set('format', format);
   return `/api/exports/${path}?${q.toString()}`;
 }

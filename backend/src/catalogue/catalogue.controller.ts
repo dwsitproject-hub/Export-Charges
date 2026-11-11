@@ -1,6 +1,6 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { Authorize } from '../auth/authorize';
-import { isDate, UUID_RE, wibToday } from '../common/fields';
+import { decimalOf, isDate, UUID_RE, wibToday } from '../common/fields';
 import { CATEGORIES, CatalogueQuery, CatalogueService, SORTS } from './catalogue.service';
 
 const list = (v: string | undefined, ok: (s: string) => boolean) => (v ?? '').split(',').map((s) => s.trim()).filter((s) => s && ok(s));
@@ -32,9 +32,11 @@ export function catalogueQuery(q: Record<string, string | undefined>): Catalogue
 export class CatalogueController {
   constructor(private readonly catalogue: CatalogueService) {}
 
+  /** `refPrice` (US$/MT): a what-if CPO reference price for this view only. Exports never take it. */
   @Get()
   @Authorize({ permissions: ['catalogue.read'] })
   get(@Query() q: Record<string, string | undefined>) {
-    return this.catalogue.catalogue(catalogueQuery(q));
+    const price = q.refPrice ? decimalOf(q.refPrice, { min: '0', minExclusive: true, scale: 6 }) : null;
+    return this.catalogue.catalogue({ ...catalogueQuery(q), refPrice: typeof price === 'string' ? price : undefined });
   }
 }

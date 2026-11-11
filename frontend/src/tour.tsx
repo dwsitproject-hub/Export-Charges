@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProp
 import { api, Me } from './api';
 
 /**
- * The guided tour: shown once at a person's first sign-in (on Home), and again whenever they press "Tour".
+ * The guided tour: shown once at a person's first sign-in (on the Full product table), and again whenever they press "Tour".
  * Each step highlights one part of the page (an element marked data-tour="…") with a short explanation; steps whose
  * part is not on the page for this person (e.g. no calculator for their role) are left out.
  */
@@ -22,14 +22,14 @@ function stepsFor(me: Me): Step[] {
       title: `Welcome to Export Charges, ${first}`,
       body: 'ECR tells you the Indonesian export duty (Bea Keluar) and export levy (Pungutan Ekspor) on palm oil products, with the official regulation behind every number. This tour takes about a minute.',
     },
-    { target: 'search', title: 'Check a product', body: 'Type a product name or HS code and press Check. You get the duty, the levy and the total per tonne for shipping today, in plain words, with the regulation behind it.' },
-    { target: 'prices', title: "Today's reference prices", body: 'The CPO reference price (set monthly by Kemendag) decides which duty band applies; the KMK exchange rate (weekly) turns dollars into Rupiah. ECR keeps both up to date by itself.' },
-    { target: 'spotlight', title: 'Every palm oil product', body: "All palm oil products with today's export duty, levy and total per tonne, their key specification, and the levy as a % of the CPO reference price." },
-    { target: 'spot-tools', title: 'Narrow the list', body: 'Pick a product group, or type part of a name, an HS code or a specification.' },
-    { target: 'palm-row', title: 'Open a product', body: 'Click any product for the full answer: how each amount was worked out, the regulation lines it comes from, and the official PDF.' },
+    { target: 'search', title: 'Find a product', body: 'Type a product name, synonym or HS code to narrow the table. Every row shows the export duty (BK), the export levy (PE) and the total per tonne.' },
+    { target: 'refprice', title: 'The CPO reference price', body: 'The monthly CPO reference price decides the duty band. Type another price and press Show charges to see which band it falls in and every duty and levy at that price. Nothing is saved.' },
+    { target: 'filters', title: 'Filter the list', body: 'Narrow the table by charge, commodity, product group or regulation. The address keeps your filters, so Copy link shares exactly this view.' },
+    { target: 'table', title: 'Duty, levy and total', body: 'Under each duty you see its price band; under each levy, its % of the CPO reference price. Click a column title to sort.' },
+    { target: 'product-row', title: 'Open a product', body: 'Click a product name for its details: the duty and levy cards, how they were worked out, the regulation lines and the official PDF.' },
     {
       target: 'nav', title: 'The main menu',
-      body: `Find a product${can('calc.run') ? ', Calculate a shipment (tonnes in, total in USD and Rupiah out, saved with an evidence pack)' : ''}, What changed, and More tools for regulations, reference prices and the official documents.`,
+      body: `Full product table, Find a product${can('calc.run') ? ', Calculate a shipment (tonnes in, total in USD and Rupiah out)' : ''}, Policy History (regulations, reference prices and data updates over time), and More tools.`,
     },
     { target: 'bell', title: 'Notifications', body: 'When a price, a rate or a regulation changes, you are told here and by email. Follow a product to hear about it in particular.' },
   ];
@@ -42,7 +42,7 @@ function stepsFor(me: Me): Step[] {
   return steps;
 }
 
-/** Starts the tour from anywhere: on Home at once, elsewhere by going to Home first. */
+/** Starts the tour from anywhere: on the product table at once, elsewhere by going there first. */
 export function startTour() {
   if (window.location.pathname === '/') window.dispatchEvent(new Event('ecr:tour'));
   else window.location.assign('/?tour=1');
@@ -77,7 +77,8 @@ export function TourHost({ me }: { me: Me }) {
     // Only the steps whose part this person has on the page (the product list may still be loading).
     const all = stepsFor(me);
     const present: Step[] = [];
-    for (const s of all) if (!s.target || (await waitFor(s.target, s.target === 'palm-row' || s.target === 'spotlight' ? 4000 : 600))) present.push(s);
+    const slow = ['search', 'refprice', 'filters', 'table', 'product-row'];
+    for (const s of all) if (!s.target || (await waitFor(s.target, slow.includes(s.target) ? 4000 : 600))) present.push(s);
     setSteps(present);
     setIndex(0);
   }, [me]);

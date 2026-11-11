@@ -67,8 +67,9 @@ export function canonicalHash(value: unknown): Buffer {
 }
 
 /** Applies a what-if price to every reference-price series on the PEB date (a copy of the state). */
-function withOverride(state: CandidateState, date: string, price: string): CandidateState {
-  const overrides = state.ofType<RefSeriesData>('REF_SERIES').filter((s) => s.data.kind === 'REFERENCE_PRICE').map((s) => {
+/** The published state with a what-if reference price for `date` (every reference-price series, or only `seriesCode`). */
+export function withOverride(state: CandidateState, date: string, price: string, seriesCode?: string): CandidateState {
+  const overrides = state.ofType<RefSeriesData>('REF_SERIES').filter((s) => s.data.kind === 'REFERENCE_PRICE' && (!seriesCode || s.data.code === seriesCode)).map((s) => {
     const current = state.ofType<RefValueData>('REF_VALUE').find((v) => v.data.seriesId === s.id && v.data.periodFrom <= date && date <= v.data.periodTo);
     const data: RefValueData = {
       seriesId: s.id,

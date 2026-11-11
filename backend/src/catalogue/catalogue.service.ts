@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { withOverride } from './calculator';
 import Decimal from 'decimal.js';
 import { DbService } from '../db/db.service';
 import type { CandidateState } from '../registry/candidate';
@@ -15,6 +16,8 @@ export const MAX_QUERY = 200;
 
 export interface CatalogueQuery {
   date: string;
+  /** What-if CPO reference price (US$/MT) instead of the published one; the published data is not changed. */
+  refPrice?: string;
   versionNo?: number;
   q?: string;
   commodity: string[];
@@ -90,7 +93,9 @@ export class CatalogueService {
 
   async catalogue(query: CatalogueQuery) {
     const view = await dataView(this.db.pool, query.date, query.versionNo);
-    const all = this.rows(view.state, query.date);
+    // A what-if CPO reference price: every charge is worked out from the published tables at that price.
+    const state = query.refPrice ? withOverride(view.state, query.date, query.refPrice, 'CPO') : view.state;
+    const all = this.rows(state, query.date);
 
     const notices = [...view.notices];
     let q = query.q?.trim() ?? '';
@@ -150,7 +155,10 @@ export class CatalogueService {
       scheduledApplied: view.scheduledApplied,
       notices,
       query: q,
-      referencePrices: this.referencePrices(view.state, query.date),
+      referencePrices: this.referencePrices(state, query.date),
+      simulation: query.refPrice
+        ? { code: 'CPO', value: query.refPrice, published: this.referencePrices(view.state, query.date).find((p) => p.code === 'CPO') ?? null }
+        : null,
       kpis,
       facets,
       total: rows.length,
