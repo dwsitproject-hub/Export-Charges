@@ -82,10 +82,10 @@ export function CataloguePage({ me }: { me: Me }) {
 
   return (
     <Page title="Full product table" wide intro={<>Every product with its duty and levy per tonne. Filter on the left, or <a href="/find">find one product</a> for a plain answer.</>}>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'end' }}>
-        <form onSubmit={(e) => { e.preventDefault(); update({ q: search.trim() || null }); }} style={{ display: 'flex', gap: 6 }}>
+      <div className="catalogue-toolbar">
+        <form className="catalogue-search" onSubmit={(e) => { e.preventDefault(); update({ q: search.trim() || null }); }} data-tour="search">
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name, synonym, HS code or keyword"
-            aria-label="Search the catalogue" style={{ width: 300 }} />
+            aria-label="Search the catalogue" />
           <button type="submit">Search</button>
         </form>
         <label style={{ fontSize: 13 }}>As-of (PEB) date
@@ -114,12 +114,12 @@ export function CataloguePage({ me }: { me: Me }) {
 
       {data && (
         <>
-          <p role="status" style={{ background: 'var(--subtle)', padding: '6px 10px', borderRadius: 6, fontSize: 14 }}>
+          <RefPricePanel data={data} onApply={(v) => update({ refPrice: v }, false)} />
+          <p role="status" className="small muted" style={{ margin: '0 0 8px' }}>
             Viewing as of <strong>{longDate(data.date)}</strong> (data version {data.versionNo})
-            {data.referencePrices.map((p) => (
-              <span key={p.seriesId}> · {p.code} {p.value
-                ? <>{formatDecimal(p.value.value, p.kind === 'FX_RATE' ? 0 : 2)} {p.unit} ({p.value.periodFrom} – {p.value.periodTo})
-                  {p.bands.map((b) => <Fragment key={b.table}>, band {b.ordinal} ({b.label})</Fragment>)}</>
+            {data.referencePrices.filter((p) => p.kind === 'FX_RATE').map((p) => (
+              <span key={p.seriesId}> · KMK rate {p.value
+                ? <>Rp {formatDecimal(p.value.value, 0)} per USD ({longDate(p.value.periodFrom)} – {longDate(p.value.periodTo)})</>
                 : <strong style={{ color: 'var(--warn-ink)' }}>not yet published</strong>}</span>
             ))}
           </p>
@@ -141,8 +141,8 @@ export function CataloguePage({ me }: { me: Me }) {
             </div>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 200px) minmax(0, 1fr)', gap: 16 }}>
-            <aside aria-label="Filters" style={{ fontSize: 13 }}>
+          <div className="catalogue-grid">
+            <aside aria-label="Filters" style={{ fontSize: 13 }} data-tour="filters">
               <FacetGroup title="Charge" facets={data.facets.category.map((f) => ({ ...f, label: CATEGORY_TEXT[f.id as Category] }))}
                 selected={listOf(params, 'category')} onToggle={(id) => toggle('category', id)} />
               <FacetGroup title="Commodity" facets={data.facets.commodity} selected={listOf(params, 'commodity')} onToggle={(id) => toggle('commodity', id)} />
@@ -154,7 +154,7 @@ export function CataloguePage({ me }: { me: Me }) {
               </label>
             </aside>
 
-            <div style={{ overflowX: 'auto' }}>
+            <div style={{ overflowX: 'auto' }} data-tour="table">
               {data.rows.length === 0 ? (
                 <div style={{ padding: 24, textAlign: 'center', border: '1px dashed var(--line)', borderRadius: 8 }}>
                   <p>No products match these filters.</p>
@@ -182,6 +182,59 @@ export function CataloguePage({ me }: { me: Me }) {
         </>
       )}
     </Page>
+  );
+}
+
+/**
+ * The CPO reference price that decides the duty band, and a what-if: type another price to see which band it falls in and
+ * every product's duty and levy at it (worked out by the API from the published tables; nothing is saved).
+ */
+function RefPricePanel({ data, onApply }: { data: CatalogueResponse; onApply: (value: string | null) => void }) {
+  const cpo = data.referencePrices.find((p) => p.code === 'CPO');
+  const published = data.simulation ? data.simulation.published : cpo;
+  const [price, setPrice] = useState(data.simulation?.value ?? '');
+  useEffect(() => setPrice(data.simulation?.value ?? ''), [data.simulation?.value]);
+  if (!cpo && !data.simulation) return null;
+  const band = (p: typeof cpo) => p?.bands[0] ? `band ${p.bands[0].ordinal} (${p.bands[0].label})` : null;
+  const usd = (v: string) => `US$ ${formatDecimal(v)}`;
+  const crude = data.rows.find((r) => r.hsCodes.some((h) => h.code === '1511.10.00' && !h.isEx));
+
+  return (
+    <section className={`refprice${data.simulation ? ' simulating' : ''}`} aria-labelledby="refprice-title" data-tour="refprice">
+      <div className="refprice-now">
+        <h2 id="refprice-title">CPO reference price</h2>
+        <p>
+          {published?.value
+            ? <>Published for {longDate(data.date)}: <strong>{usd(published.value.value)}/MT</strong> ({longDate(published.value.periodFrom)} – {longDate(published.value.periodTo)}){band(published) && <>, {band(published)}</>}</>
+            : <>No CPO reference price is published for {longDate(data.date)} yet.</>}
+        </p>
+      </div>
+      <form className="refprice-form" onSubmit={(e) => { e.preventDefault(); const v = price.trim(); onApply(v && Number(v) > 0 ? v : null); }}>
+        <label className="field-stack">
+          <span>Try another price <span className="help">(US$/MT)</span></span>
+          <input type="number" inputMode="decimal" min="0.01" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="e.g. 1050" />
+        </label>
+        <button type="submit" className="primary">Show charges</button>
+        {data.simulation && <button type="button" onClick={() => { setPrice(''); onApply(null); }}>Back to the published price</button>}
+      </form>
+      {data.simulation && (
+        <div className="refprice-result" role="status">
+          <p>
+            At <strong>{usd(data.simulation.value)}/MT</strong> the CPO price falls in <strong>{band(cpo) ?? 'no band'}</strong>
+            {published?.value && band(published) && band(published) !== band(cpo) && <> (the published price is in {band(published)})</>}.
+            Every export duty (BK) and levy (PE) below is worked out at this price.
+          </p>
+          {crude && (
+            <p>
+              {crude.nameEn ?? crude.nameId}: duty <strong>{crude.bk.usdPerMt !== null ? usd(crude.bk.usdPerMt) : '—'}</strong>
+              {crude.pe.usdPerMt !== null && <>, levy <strong>{usd(crude.pe.usdPerMt)}</strong>{crude.pe.rate && ` (${crude.pe.rate}% of the price)`}</>}
+              {crude.totalUsdPerMt !== null && <>, total <strong>{usd(crude.totalUsdPerMt)}</strong></>} per tonne.
+            </p>
+          )}
+          <p className="small">A what-if only: nothing is saved, and exports and calculations use the published price.</p>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -264,8 +317,8 @@ function CatalogueTable({ rows, words, sort, dir, onSort, date }: {
         </tr>
       </thead>
       <tbody>
-        {rows.map((r) => (
-          <tr key={r.productId} style={{ borderBottom: '1px solid var(--line)', verticalAlign: 'top' }}>
+        {rows.map((r, i) => (
+          <tr key={r.productId} style={{ borderBottom: '1px solid var(--line)', verticalAlign: 'top' }} data-tour={i === 0 ? 'product-row' : undefined}>
             <td style={{ whiteSpace: 'nowrap' }}>{r.group}{r.itemNoAsPrinted && <div style={{ color: 'var(--muted)' }}>no. {r.itemNoAsPrinted}</div>}</td>
             <td>
               <a href={`/products/${r.productId}?date=${date}`}><Highlight text={r.nameId} words={words} /></a>

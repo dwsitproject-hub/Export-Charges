@@ -431,8 +431,8 @@ a.stat:hover { box-shadow: inset 0 0 0 1px var(--accent); }
 .charge-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
 .charge { border-radius: 18px; padding: 22px; display: flex; flex-direction: column; gap: 2px; background: var(--accent-soft); }
 .charge .k { font-size: 15px; font-weight: 700; color: var(--accent-strong); }
-.charge .v { font-size: 34px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.2; }
-.charge .v.text { font-size: 22px; }
+.charge .v { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.charge .v.text { font-size: 18px; }
 .charge .p { font-size: 15px; color: var(--ink-2); }
 .charge.levy { background: var(--levy); }
 .charge.levy .k { color: var(--levy-ink); }
@@ -613,3 +613,28 @@ a.palm-row:hover strong { color: var(--accent-strong); }
 .role-picker label.disabled { opacity: 0.55; cursor: not-allowed; }
 .role-picker label span { display: flex; flex-direction: column; }
 .role-picker small { color: var(--muted); font-size: 12px; }
+
+/* Full product table: the CPO reference price and its what-if */
+.refprice { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px 24px; align-items: end; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 16px 20px; margin: 16px 0 10px; }
+.refprice.simulating { border-color: var(--cta); box-shadow: inset 4px 0 0 var(--cta); }
+.refprice h2 { margin: 0 0 4px; font-size: 18px; }
+.refprice-now p { margin: 0; font-size: 15px; }
+.refprice-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.refprice-form input { width: 160px; }
+.refprice-result { grid-column: 1 / -1; background: var(--warn); color: var(--warn-ink); border-radius: 12px; padding: 10px 14px; }
+.refprice-result p { margin: 4px 0; font-size: 15px; }
+.refprice-result p.small { font-size: 13px; }
+@media (max-width: 720px) {
+  .refprice { grid-template-columns: 1fr; }
+  .refprice-form input { width: 100%; }
+  .refprice-form label { flex: 1 1 100%; }
+}
+
+.catalogue-toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+.catalogue-search { display: flex; gap: 6px; flex: 0 1 380px; min-width: 0; }
+.catalogue-search input { flex: 1; min-width: 0; }
+.catalogue-grid { display: grid; grid-template-columns: minmax(0, 200px) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 720px) {
+  .catalogue-search { flex: 1 1 100%; }
+  .catalogue-grid { grid-template-columns: minmax(0, 1fr); }
+}

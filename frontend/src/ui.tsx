@@ -10,10 +10,10 @@ interface NavItem { href: string; label: string; hint?: string; perm?: string; a
 
 /** The everyday tasks, always in view as tabs; `also` lists pages that belong to a tab. */
 const TABS: NavItem[] = [
-  { href: '/', label: 'Home' },
+  { href: '/', label: 'Full product table', perm: 'catalogue.read', also: ['/catalogue'] },
   { href: '/find', label: 'Find a product', perm: 'catalogue.read', also: ['/products'] },
   { href: '/calculator', label: 'Calculate a shipment', perm: 'calc.run', also: ['/calculations'] },
-  { href: '/updates', label: 'What changed', perm: 'catalogue.read', also: ['/bulletins'] },
+  { href: '/policy-history', label: 'Policy History', perm: 'catalogue.read', also: ['/updates', '/bulletins'] },
 ];
 
 /** "More tools": everything else, grouped; an item shows when the person holds its permission (the API enforces it either way). */
@@ -21,7 +21,6 @@ const MORE: { title: string; items: NavItem[] }[] = [
   {
     title: 'Look things up',
     items: [
-      { href: '/catalogue', label: 'Full product table', hint: 'Every product, with filters and download', perm: 'catalogue.read' },
       { href: '/calculations', label: 'Saved calculations', perm: 'calc.run' },
       { href: '/regulations', label: 'Regulations', hint: 'The decrees behind the rates', perm: 'catalogue.read' },
       { href: '/products', label: 'Product list', perm: 'catalogue.read' },
@@ -127,7 +126,7 @@ function Shell({ me, title, wide, actions, bare, intro, children }: {
   const allowed = (i: NavItem) => !i.perm || perms.includes(i.perm);
   const under = (href: string) => path === href || path.startsWith(`${href}/`);
   const tabs = TABS.filter(allowed);
-  const currentTab = tabs.find((t) => (t.href === '/' ? path === '/' : under(t.href) || t.also?.some(under)));
+  const currentTab = tabs.find((t) => (t.href === '/' ? path === '/' || Boolean(t.also?.some(under)) : under(t.href) || t.also?.some(under)));
   const groups = MORE.map((g) => ({ ...g, items: g.items.filter(allowed) })).filter((g) => g.items.length);
   const inMore = !currentTab && groups.some((g) => g.items.some((i) => under(i.href)));
 

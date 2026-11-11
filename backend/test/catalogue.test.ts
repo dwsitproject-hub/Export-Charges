@@ -224,6 +224,24 @@ describe('charge calculator and catalogue', () => {
     }
   });
 
+  it('shows the band, duty and levy for a what-if CPO reference price without changing anything', async () => {
+    const cpo = (c: { rows: { nameId: string; bk: { usdPerMt: string | null; band: { label: string } | null }; pe: { usdPerMt: string | null } }[] }) =>
+      c.rows.find((r) => r.nameId === 'Minyak Sawit Mentah')!;
+    const published = await catalogue();
+    expect(published.simulation).toBeNull();
+    expect(cpo(published).bk).toMatchObject({ usdPerMt: '33', band: { label: '680–1000' } });
+
+    const whatIf = await catalogue('refPrice=1200');
+    expect(whatIf.simulation).toMatchObject({ code: 'CPO', value: '1200', published: { value: { value: '950' } } });
+    expect(whatIf.referencePrices.find((p: { code: string }) => p.code === 'CPO')).toMatchObject({ value: { value: '1200' }, bands: [{ ordinal: 3, label: '> 1000' }] });
+    expect(cpo(whatIf).bk).toMatchObject({ usdPerMt: '74', band: { label: '> 1000' } });
+    // The levy is the same % of the what-if price as of the published one.
+    expect(Number(cpo(whatIf).pe.usdPerMt)).toBeCloseTo(Number(cpo(published).pe.usdPerMt) * 1200 / 950, 6);
+    // Nothing published changed, and a useless value is ignored.
+    expect(cpo(await catalogue()).bk.usdPerMt).toBe('33');
+    expect((await catalogue('refPrice=-5')).simulation).toBeNull();
+  });
+
   it('searches names, synonyms, uraian and HS codes in any format (US-41)', async () => {
     for (const q of ['gliserin', 'GLYCERINE', '15200010', '1520.00.10', '1520 00 10']) {
       expect(names((await catalogue(`q=${encodeURIComponent(q)}`)).rows)).toEqual(['Gliserín Kasar']);
