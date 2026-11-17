@@ -79,7 +79,7 @@ function Brand({ short = false }: { short?: boolean }) {
   return (
     <a className="brand" href="/">
       <img className="brand-mark" src="/icon.svg" alt="" width="40" height="40" />
-      {!short && <span className="brand-name">Export Charges<small>Duty &amp; levy, made simple</small></span>}
+      {!short && <span className="brand-name">Indonesia L/D Policy<small>Duty &amp; levy, made simple</small></span>}
       {short && <span className="brand-name">ECR</span>}
     </a>
   );
@@ -118,7 +118,7 @@ function Shell({ me, title, wide, actions, bare, intro, children }: {
     unreadNotifications().then((r) => setUnread(r.unread)).catch(() => undefined);
   }, []);
   useEffect(() => {
-    document.title = `${title} · ECR`;
+    document.title = `${title} · Indonesia L/D Policy`;
   }, [title]);
 
   const path = window.location.pathname;

@@ -163,7 +163,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
           password: env.SMTP_PASSWORD || null,
         }
       : null,
-    mailFrom: env.MAIL_FROM?.trim() || 'ECR <no-reply@ecr.local>',
+    mailFrom: env.MAIL_FROM?.trim() || 'Indonesia L/D Policy <no-reply@ecr.local>',
     emailOutboxIntervalMs: Number(env.EMAIL_OUTBOX_INTERVAL_MS ?? 60_000),
     exportAsyncThreshold: Math.max(0, Number(env.EXPORT_ASYNC_THRESHOLD ?? 50_000)),
     exportJobIntervalMs: Number(env.EXPORT_JOB_INTERVAL_MS ?? 15_000),

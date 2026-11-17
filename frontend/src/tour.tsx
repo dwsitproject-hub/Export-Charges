@@ -19,8 +19,8 @@ function stepsFor(me: Me): Step[] {
   const first = me.user.fullName.split(/\s+/)[0];
   const steps: Step[] = [
     {
-      title: `Welcome to Export Charges, ${first}`,
-      body: 'ECR tells you the Indonesian export duty (Bea Keluar) and export levy (Pungutan Ekspor) on palm oil products, with the official regulation behind every number. This tour takes about a minute.',
+      title: `Welcome to Indonesia L/D Policy, ${first}`,
+      body: 'Indonesia L/D Policy tells you the Indonesian export duty (Bea Keluar) and export levy (Pungutan Ekspor) on palm oil products, with the official regulation behind every number. This tour takes about a minute.',
     },
     { target: 'search', title: 'Find a product', body: 'Type a product name, synonym or HS code to narrow the table. Every row shows the export duty (BK), the export levy (PE) and the total per tonne.' },
     { target: 'refprice', title: 'The CPO reference price', body: 'The monthly CPO reference price decides the duty band. Type another price and press Show charges to see which band it falls in and every duty and levy at that price. Nothing is saved.' },

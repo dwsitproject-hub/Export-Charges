@@ -165,7 +165,7 @@ function route(path: string, me: Me): ReactNode {
       const first = LANDING.slice(1).find((p) => perms.includes(PAGE_PERMISSIONS.find(([prefix]) => prefix === p)![1]));
       if (first) return <GoTo href={first} />;
       return (
-        <Page title="Welcome to Export Charges">
+        <Page title="Welcome to Indonesia L/D Policy">
           <p>Your account has no role yet, so there is nothing to look up. Ask your administrator for access.</p>
         </Page>
       );

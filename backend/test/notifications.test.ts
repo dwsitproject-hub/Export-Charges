@@ -117,7 +117,7 @@ describe('notifications, subscriptions and bulletins', () => {
     expect((await checker.agent.get('/api/notifications/unread-count').expect(200)).body.unread).toBe(1);
 
     expect(await outbox.sendDue()).toEqual({ sent: 2, failed: 0 });
-    const emails = mail.sent.filter((m) => m.subject === '[ECR] Change set waiting for review: Rename CPO');
+    const emails = mail.sent.filter((m) => m.subject === '[Indonesia L/D Policy] Change set waiting for review: Rename CPO');
     expect(emails.map((m) => m.to).sort()).toEqual([checker.me.user.email, checker2.me.user.email].sort());
     expect(emails[0].text).toContain(`Open in ECR: http://ecr.test/change-sets/${set}`);
     // US-48-N1 AC2: no draft data in emails.
@@ -165,7 +165,7 @@ describe('notifications, subscriptions and bulletins', () => {
     expect((await notices(maker, 'CHANGESET_PUBLISHED'))[0].title).toBe(`Published as version ${v}: BK amounts for CPO`);
 
     await outbox.sendDue();
-    const email = mail.sent.find((m) => m.to === follower.me.user.email && m.subject.startsWith(`[ECR] Version ${v}`))!;
+    const email = mail.sent.find((m) => m.to === follower.me.user.email && m.subject.startsWith(`[Indonesia L/D Policy] Version ${v}`))!;
     expect(email.text).toContain(`Open in ECR: http://ecr.test/bulletins/${v}`);
     expect(email.text).toMatch(/You follow 1\. Minyak Sawit Mentah\. Stop following it: http:\/\/ecr\.test\/unsubscribe\?token=[0-9a-f-]{36}\.[\w-]+/);
     expect(email.text).toMatch(/You follow Kelapa sawit \(PALM\)\. Stop following it:/);

@@ -190,7 +190,7 @@ describe('automatic update of the CPO reference price and the KMK rate', () => {
     const [cpoNotice] = await notices(viewer.me.user.id, 'AUTO_UPDATE');
     expect(cpoNotice.body).toContain('(previous period: US$ 950.00)');
     expect(cpoNotice.link).toMatch(/^\/bulletins\/\d+$/);
-    const { rows: [mail] } = await h.pool.query('SELECT count(*)::int AS n FROM ecr.email_outbox WHERE to_user_id = $1 AND subject LIKE $2', [viewer.me.user.id, '[ECR] CPO reference price%']);
+    const { rows: [mail] } = await h.pool.query('SELECT count(*)::int AS n FROM ecr.email_outbox WHERE to_user_id = $1 AND subject LIKE $2', [viewer.me.user.id, '[Indonesia L/D Policy] CPO reference price%']);
     expect(mail.n).toBe(1);
   });
 

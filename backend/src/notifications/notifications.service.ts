@@ -436,10 +436,10 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
       if (!rows[0]) continue;
       const footer = n.footer?.(r.id);
       const text = `${n.body}\n\nOpen in ECR: ${this.config.publicBaseUrl}${n.link}\n\n${footer ? `${footer}\n\n` : ''}` +
-        '— Export Charges Registry (ECR). This message was sent automatically; ECR is reachable from the office network or VPN.';
+        '— Indonesia L/D Policy. This message was sent automatically; Indonesia L/D Policy is reachable from the office network or VPN.';
       await q.query(
         'INSERT INTO ecr.email_outbox (notification_id, to_user_id, to_email, subject, body_text) VALUES ($1, $2, $3, $4, $5)',
-        [rows[0].id, r.id, r.email, `[ECR] ${n.title}`.slice(0, 300), text],
+        [rows[0].id, r.id, r.email, `[Indonesia L/D Policy] ${n.title}`.slice(0, 300), text],
       );
     }
   }
