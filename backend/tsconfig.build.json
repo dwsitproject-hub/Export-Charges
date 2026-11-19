@@ -7,5 +7,5 @@
   "include": ["src/**/*.ts"],
   "exclude": ["src/scripts/**"],
   // Commands that start the Nest services need its decorator metadata, so they run compiled (tsx does not emit it).
-  "files": ["src/scripts/seed-official-data.ts"]
+  "files": ["src/scripts/seed-official-data.ts", "src/scripts/correct-official-products.ts"]
 }

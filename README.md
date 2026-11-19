@@ -476,7 +476,10 @@ one folder: `STORAGE_LOCAL_PATH` if set; else ECR's folder on the shared Synolog
 ECR never creates it, see docs/DEPLOY-STAGING.md); else `STORAGE_DIR` (`backend/var/storage` locally). The API
 checks at start that it can write there. **First load** of a new environment: `node dist/scripts/seed-official-data.js
 --as <email> --reason "…"` publishes `backend/seed/official-palm-2026-11.json` directly, without a Checker, on an
-empty registry only (audited as `CHANGESET_PUBLISHED_DIRECT`). Uploads are virus-scanned by ClamAV when `CLAMD_HOST` is set; without it they are recorded as
+empty registry only (audited as `CHANGESET_PUBLISHED_DIRECT`). A registry loaded before the item numbers and annex
+pages of the seed were corrected (Permenperin 32/2024 as printed) is fixed with `node dist/scripts/correct-official-products.js
+--as <email> [--dry-run]`: ECR drafts one change set with only those two fields per product and submits it for a
+Checker; no charge changes, and running it again drafts nothing. Uploads are virus-scanned by ClamAV when `CLAMD_HOST` is set; without it they are recorded as
 `NOT_SCANNED`, which is refused at startup wherever `MALWARE_SCAN_REQUIRED` is true (the default with
 `COOKIE_SECURE=true`).
 
