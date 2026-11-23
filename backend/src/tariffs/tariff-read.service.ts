@@ -3,7 +3,7 @@ import { ApiError } from '../common/api-error';
 import { DbService } from '../db/db.service';
 import { CandidateState } from '../registry/candidate';
 import { CommodityData, ProductData, regulationLabel, RegulationData } from '../registry/entities';
-import { chargeFor, valueOn } from './charge-engine';
+import { activeLines, Charge, chargeFor, valueOn } from './charge-engine';
 import { BandTableData, lineLabel, RefSeriesData, RefValueData, ScheduleData, ScheduleLineData } from './tariff-entities';
 
 /** Published reference prices, band tables and duty/levy schedules (latest data version only). */
@@ -93,7 +93,28 @@ export class TariffReadService {
   /** BK and PE for one product on a date, with the legal basis and the values used (PRD FR-CAT-05). */
   async productCharges(productId: string, date: string) {
     const state = await CandidateState.load(this.db.pool);
-    return { date, bk: chargeFor(state, productId, 'BK', date), pe: chargeFor(state, productId, 'PE', date) };
+    const bk = chargeFor(state, productId, 'BK', date);
+    const pe = chargeFor(state, productId, 'PE', date);
+    return { date, bk, pe, tranches: { bk: this.tranches(state, productId, 'BK', date, bk), pe: this.tranches(state, productId, 'PE', date, pe) } };
+  }
+
+  /**
+   * Every price band (tranche) of the product's line with its amount, and which one applies on the date — for lines
+   * charged by price band; null otherwise (not listed, a % of the reference price, a fixed amount, or a data error).
+   */
+  private tranches(state: CandidateState, productId: string, chargeType: 'BK' | 'PE', date: string, charge: Charge) {
+    const lines = activeLines(state, productId, chargeType, date);
+    if (lines.length !== 1) return null;
+    const l = lines[0].data;
+    if (l.basisType !== 'BAND_USD_PER_MT' && l.basisType !== 'BAND_PCT') return null;
+    const table = state.get<BandTableData>(l.bandTableId, 'BAND_TABLE');
+    if (!table) return null;
+    return {
+      basisType: l.basisType,
+      refSeries: state.get<RefSeriesData>(l.refSeriesId, 'REF_SERIES')?.code ?? null,
+      current: charge.band?.ordinal ?? null,
+      bands: table.bands.map((b, i) => ({ ordinal: i + 1, ...b, value: l.bandValues[i] ?? null })),
+    };
   }
 
   private scheduleSummary(state: CandidateState, id: string, s: ScheduleData, lineCount: number) {

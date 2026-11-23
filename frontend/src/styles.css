@@ -438,6 +438,20 @@ a.stat:hover { box-shadow: inset 0 0 0 1px var(--accent); }
 .charge.levy .k { color: var(--levy-ink); }
 .charge.total { background: var(--hero); color: var(--hero-ink); }
 .charge.total .k { color: #e7d8c6; }
+/* Duty per tranche on the product page: every price band, the one in force highlighted. */
+.tranches { margin-top: 22px; max-width: 640px; }
+.tranches h3 { margin: 0 0 4px; font-size: 17px; }
+.tranches p { margin: 0 0 10px; }
+.tranches .table-wrap { max-height: none; } /* all 17 tranches at once, no scroll box inside the page */
+.tranche-table td, .tranche-table th { padding: 7px 14px; }
+.tranche-table th { white-space: normal; }
+@media (max-width: 720px) {
+  /* Keep the amount on screen at phone width: narrower cells instead of a sideways scroll. */
+  .tranche-table td, .tranche-table th { padding: 6px 8px; }
+  .tranche-table .badge { display: none; }
+}
+.tranche-table tr.now td { background: var(--accent-soft); font-weight: 700; }
+.tranche-table tr.now td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .charge.total .p { color: var(--hero-muted); }
 
 .steps-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 16px; }

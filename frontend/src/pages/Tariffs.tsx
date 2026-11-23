@@ -8,6 +8,7 @@ import {
   listBandTables,
   listRefSeries,
   listSchedules,
+  Tranches,
 } from '../api';
 import { Badge, ErrorText, headStyle, Page, rowStyle, tableStyle, TableWrap } from '../ui';
 import { chargeText } from './ChangeSets';
@@ -200,6 +201,8 @@ export function ProductCharges({ productId }: { productId: string }) {
           <ChargeCard title="Export levy · Pungutan Ekspor" c={charges.pe} />
         </div>
       )}
+      {charges && <TrancheTable title="Duty per tranche" c={charges.bk} t={charges.tranches.bk} date={charges.date} />}
+      {charges?.tranches.pe && <TrancheTable title="Levy per tranche" c={charges.pe} t={charges.tranches.pe} date={charges.date} />}
       <div className="actions" style={{ marginTop: 16 }}>
         <a className="button primary" href={`/calculator?lines=${productId}:1&peb=${date}`}>Calculate a shipment</a>
       </div>
@@ -207,6 +210,64 @@ export function ProductCharges({ productId }: { productId: string }) {
         From the published data. Duty applies at the PEB registration date; the Rupiah amount uses the KMK rate on the payment date (see the calculator).
       </p>
     </section>
+  );
+}
+
+const amount = (n: string) => Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 });
+
+/** "up to 680", "above 930 up to 980", "above 1,430": the band edges as PMK 68 states them (lower exclusive, upper inclusive). */
+function bandRange(b: { lowerExclusive: string | null; upperInclusive: string | null; label: string }) {
+  if (b.lowerExclusive === null && b.upperInclusive !== null) return `up to ${amount(b.upperInclusive)}`;
+  if (b.upperInclusive === null && b.lowerExclusive !== null) return `above ${amount(b.lowerExclusive)}`;
+  if (b.lowerExclusive !== null && b.upperInclusive !== null) return `above ${amount(b.lowerExclusive)} up to ${amount(b.upperInclusive)}`;
+  return b.label;
+}
+
+/** Every price band (tranche) of the product's duty line with its amount, the one in force highlighted. */
+function TrancheTable({ title, c, t, date }: { title: string; c: Charge; t: Tranches | null; date: string }) {
+  if (!t) {
+    // Nothing to tabulate: say why in one line (no duty at all, or a rate that does not depend on a price band).
+    if (c.status === 'NOT_LISTED') {
+      return (
+        <div className="tranches">
+          <h3>{title}</h3>
+          <p className="small muted">Not on the export duty list in force on {date}, so there is no duty in any tranche.</p>
+        </div>
+      );
+    }
+    return null;
+  }
+  const pct = t.basisType === 'BAND_PCT';
+  const price = c.referencePrice;
+  return (
+    <div className="tranches">
+      <h3>{title}</h3>
+      <p className="small muted">
+        The {t.refSeries ?? 'reference'} price of the month picks the tranche
+        {price && t.current ? <>: {t.refSeries} {formatDecimal(price.value)} {price.unit} on {date} is tranche <strong>{t.current}</strong></> : null}
+        {!price && <> — no {t.refSeries ?? 'reference'} price is published for {date} yet, so no tranche is marked</>}.
+        {c.line && <> From {c.line.regulation} {c.line.annexLabel}{c.line.kelompok && `, Kelompok ${c.line.kelompok}`}{c.line.itemNo && `, no. ${c.line.itemNo}`}.</>}
+      </p>
+      <TableWrap>
+        <table className="tranche-table">
+          <thead>
+            <tr><th>Tranche</th><th>{t.refSeries ?? 'Reference'} price ({price?.unit ?? 'USD/MT'})</th><th className="num">{pct ? 'Rate' : 'Amount (USD/MT)'}</th></tr>
+          </thead>
+          <tbody>
+            {t.bands.map((b) => {
+              const now = b.ordinal === t.current;
+              return (
+                <tr key={b.ordinal} className={now ? 'now' : undefined} aria-current={now ? 'true' : undefined}>
+                  <td>{b.ordinal}{now && <span className="badge" style={{ marginLeft: 8 }}>Now</span>}</td>
+                  <td>{bandRange(b)}</td>
+                  <td className="num">{b.value === null ? '—' : pct ? `${amount(b.value)} %` : amount(b.value)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </TableWrap>
+    </div>
   );
 }
 

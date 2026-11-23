@@ -222,13 +222,23 @@ describe('duty and levy schedules, band tables and reference prices', () => {
       line: { regulation: 'PMK 38/2024', annexLabel: 'Lampiran I', kelompok: 'I', uraian: 'Crude Palm Oil (CPO)' },
     });
     expect(cpo.pe).toMatchObject({ status: 'CHARGED', usdPerMt: '95' });
+    // Every tranche of the duty line with its amount, the one in force marked; a % levy has no tranches.
+    expect(cpo.tranches.bk).toMatchObject({ basisType: 'BAND_USD_PER_MT', refSeries: 'CPO', current: 2 });
+    expect(cpo.tranches.bk.bands.map((b: { ordinal: number; value: string }) => [b.ordinal, b.value])).toEqual([[1, '0'], [2, '33'], [3, '74']]);
+    expect(cpo.tranches.bk.bands[1]).toMatchObject({ lowerExclusive: '680', upperInclusive: '1000', label: '680–1000' });
+    expect(cpo.tranches.pe).toBeNull();
     // Next month the price is 1300, so the top band applies.
-    expect((await charges(ids.cpo, nextMonthStart)).bk).toMatchObject({ usdPerMt: '74', band: { ordinal: 3 } });
+    const next = await charges(ids.cpo, nextMonthStart);
+    expect(next.bk).toMatchObject({ usdPerMt: '74', band: { ordinal: 3 } });
+    expect(next.tranches.bk.current).toBe(3);
+    // Without a price for the date the tranches still show, none of them marked.
+    expect((await charges(ids.cpo, '2035-01-15')).tranches.bk).toMatchObject({ current: null });
     // BR-CAL-03: no published price for the date blocks the result instead of guessing.
     expect((await charges(ids.cpo, '2035-01-15')).pe).toMatchObject({ status: 'MISSING_VALUE', usdPerMt: null });
 
     const olein = await charges(ids.olein);
     expect(olein.bk).toMatchObject({ status: 'NOT_LISTED' });
+    expect(olein.tranches).toEqual({ bk: null, pe: null });
     expect(olein.pe).toMatchObject({ status: 'LISTED_ZERO', usdPerMt: '0' });
 
     const schedules = (await viewer.agent.get('/api/schedules').expect(200)).body;

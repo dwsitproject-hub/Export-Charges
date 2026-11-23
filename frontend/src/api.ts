@@ -579,7 +579,16 @@ export const getRefSeries = (id: string) =>
 export const listBandTables = () => api<(BandTableData & { entityId: string; refSeries: string | null })[]>('/band-tables');
 export const listSchedules = () => api<ScheduleView[]>('/schedules');
 export const getSchedule = (id: string) => api<ScheduleView & { lines: ScheduleLineView[] }>(`/schedules/${id}`);
-export const getProductCharges = (id: string, date = '') => api<{ date: string; bk: Charge; pe: Charge }>(`/products/${id}/charges${date ? `?date=${date}` : ''}`);
+/** Every price band (tranche) of a line charged by band, with its amount; `current` is the band in force on the date. */
+export interface Tranches {
+  basisType: 'BAND_USD_PER_MT' | 'BAND_PCT';
+  refSeries: string | null;
+  current: number | null;
+  bands: (Band & { ordinal: number; value: string | null })[];
+}
+
+export const getProductCharges = (id: string, date = '') =>
+  api<{ date: string; bk: Charge; pe: Charge; tranches: { bk: Tranches | null; pe: Tranches | null } }>(`/products/${id}/charges${date ? `?date=${date}` : ''}`);
 export const getImpact = (setId: string) => api<{ date: string; rows: ImpactRow[] }>(`/change-sets/${setId}/impact`);
 
 /**
