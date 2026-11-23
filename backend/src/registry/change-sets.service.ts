@@ -337,8 +337,11 @@ export class ChangeSetsService implements OnModuleInit, OnModuleDestroy {
     return this.get(setId);
   }
 
-  /** Validates and hands the set to Checkers (US-29-P1). Errors block; warnings need acknowledgement. */
-  async submit(actor: Actor, setId: string, input: unknown) {
+  /**
+   * Validates and hands the set to Checkers (US-29-P1). Errors block; warnings need acknowledgement.
+   * `notifyCheckers: false` is for server-side commands that publish the set directly right after (no API route sets it).
+   */
+  async submit(actor: Actor, setId: string, input: unknown, { notifyCheckers = true }: { notifyCheckers?: boolean } = {}) {
     const acknowledge = asObject(input).acknowledgeWarnings === true;
     const blocked = await this.db.tx(async (client) => {
       const set = await this.lockEditable(client, actor, setId);
@@ -361,7 +364,7 @@ export class ChangeSetsService implements OnModuleInit, OnModuleDestroy {
       );
       await this.record(client, actor, 'CHANGESET_SUBMITTED', setId, { after: { warningsAcknowledged: warnings.length } });
       const editors = [set.created_by, ...(await this.loadItems(client, setId)).flatMap((i) => i.edited_by)];
-      await this.notifications.submitted(client, set, editors);
+      if (notifyCheckers) await this.notifications.submitted(client, set, editors);
       return null;
     });
     // Findings are committed even when submission is refused, so the Maker sees them (the throw comes after commit).

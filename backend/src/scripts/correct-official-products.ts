@@ -1,7 +1,7 @@
 /**
  * Corrects the "as printed" item numbers and annex pages of the palm products in a registry that was loaded from an
- * earlier copy of seed/official-palm-2026-11.json (scripts/official-corrections.ts). ECR drafts one change set and
- * submits it; a Checker approves it in ECR (Rate updates). Nothing is published by this command.
+ * earlier copy of seed/official-palm-2026-11.json (scripts/official-corrections.ts). ECR publishes the correction
+ * itself, without a Checker, and tells every user in ECR and by email. --dry-run only lists what would change.
  *
  * Runs compiled, in the API container:
  *   node dist/scripts/correct-official-products.js --as <email of the person running it> [--dry-run] [--seed <file>]
@@ -14,8 +14,9 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../app.module';
 import { loadConfig, loadDotEnv } from '../config';
 import { DbService } from '../db/db.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { ChangeSetsService } from '../registry/change-sets.service';
-import { draftProductCorrections, findProductCorrections, type ProductCorrection } from './official-corrections';
+import { findProductCorrections, publishProductCorrections, type ProductCorrection } from './official-corrections';
 
 type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -49,16 +50,15 @@ async function main() {
       return;
     }
 
-    const r = await draftProductCorrections(app.get(ChangeSetsService), db.pool, seed, `${operator.full_name} (${values.as})`);
+    const r = await publishProductCorrections(app.get(ChangeSetsService), app.get(NotificationsService), db.pool, seed, `${operator.full_name} (${values.as})`);
+    for (const id of r.cancelled) console.log(`Cancelled the earlier correction that was waiting for a Checker: /change-sets/${id}`);
     for (const c of r.corrections) console.log(show(c));
     for (const u of r.unmatched) console.log(`  not found, left alone: ${u}`);
-    if (!r.setId) {
+    if (!r.version) {
       console.log('Every product already has the item number and annex page of the seed; nothing to correct.');
-    } else if (r.notSubmitted) {
-      console.log(`Drafted change set ${r.setId} with ${r.corrections.length} correction(s), but it could not be submitted: ${r.notSubmitted}`);
-      process.exitCode = 1;
     } else {
-      console.log(`Change set ${r.setId} with ${r.corrections.length} correction(s) is waiting for a Checker: ${loadConfig().publicBaseUrl}/change-sets/${r.setId}`);
+      console.log(`Published ${r.corrections.length} correction(s) as data version ${r.version}, without a Checker; ${r.notified} user(s) notified.`);
+      console.log(`Bulletin: ${loadConfig().publicBaseUrl}/bulletins/${r.version}`);
     }
   } finally {
     await app.close();
